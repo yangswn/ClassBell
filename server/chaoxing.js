@@ -1,0 +1,220 @@
+'use strict';
+
+const {
+  parseTaskFeed,
+  parseBackClazz,
+  parseWorkListHtml,
+  parseExamListHtml,
+  dedupe
+} = require('./chaoxing-parser');
+
+const LOGIN_URL = 'https://passport2.chaoxing.com/login?fid=&newversion=true&refer=https%3A%2F%2Fi.chaoxing.com';
+const HOME_URL = 'https://i.chaoxing.com/';
+const API_BASE = 'https://mooc1-api.chaoxing.com';
+const HTML_BASE = 'https://mooc1.chaoxing.com';
+
+class ChaoxingError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+function cleanError(error) {
+  return {
+    code: (error && error.code) || 'ERROR',
+    message: String((error && error.message) || error).slice(0, 240)
+  };
+}
+
+class ChaoxingService {
+  constructor({ telemetry }) {
+    this.telemetry = telemetry;
+    this.cookies = [];
+    this.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+    this.lastAuth = null;
+  }
+
+  setCookies(cookies) {
+    this.cookies = Array.isArray(cookies) ? cookies : [];
+    this.telemetry.log('cx_cookies_received', {
+      meta: { count: this.cookies.length, has_uid: this.getUid() !== '' }
+    });
+  }
+
+  getUid() {
+    const find = (name) => this.cookies.find((c) => c && c.name === name);
+    return (find('_uid') || find('UID') || find('puid') || {}).value || '';
+  }
+
+  cookieHeader() {
+    return this.cookies
+      .filter((c) => c && c.name && c.value !== undefined)
+      .map((c) => `${c.name}=${c.value}`)
+      .join('; ');
+  }
+
+  async getAuthStatus() {
+    const uid = this.getUid();
+    this.lastAuth = {
+      loggedIn: Boolean(uid),
+      uid,
+      name: '',
+      url: '',
+      checkedAt: new Date().toISOString()
+    };
+    return this.lastAuth;
+  }
+
+  async _fetch(url, { timeout = 22000, headers = {} } = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': this.userAgent,
+          'Accept': 'application/json, text/plain, text/html, */*',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.6',
+          'Referer': 'https://i.chaoxing.com/',
+          'Cookie': this.cookieHeader(),
+          ...headers
+        }
+      });
+      const text = await res.text();
+      if (!res.ok) throw new ChaoxingError(`HTTP_${res.status}`, `HTTP ${res.status}`);
+      if (text.length > 8 * 1024 * 1024) throw new ChaoxingError('RESPONSE_TOO_LARGE', 'response too large');
+      return { status: res.status, text, contentType: res.headers.get('content-type') || '' };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async _fetchJson(url, opts) {
+    const res = await this._fetch(url, opts);
+    const trimmed = res.text.trim();
+    if (trimmed.startsWith('<')) {
+      throw new ChaoxingError('WAF_HTML', 'server returned HTML instead of JSON');
+    }
+    try {
+      return JSON.parse(trimmed.replace(/^\uFEFF/, ''));
+    } catch (_) {
+      throw new ChaoxingError('INVALID_JSON', 'response is not valid JSON');
+    }
+  }
+
+  async fetchCourseList() {
+    const url = `${API_BASE}/mycourse/backclazzdata?view=json&getTchClazzType=1&mcode=`;
+    return parseBackClazz(await this._fetchJson(url));
+  }
+
+  async fetchTaskFeed(uid) {
+    if (!uid) throw new ChaoxingError('UID_MISSING', '未读取到学习通用户标识');
+    const fields = [
+      'id', 'userid', 'taskrefid', 'classid', 'courseid', 'taskcreatetime',
+      'taskopentime', 'taskendtime', 'status', 'type', 'coursename',
+      'coursecover', 'title', 'dotaskurl', 'clientexam', 'finishstandard'
+    ].join(',');
+    const params = new URLSearchParams({
+      id: '', userid: uid, type: '', limit: '100', offset: '0',
+      order: 'time', orderway: 'desc', fields, view: 'json'
+    });
+    const body = await this._fetchJson(`${API_BASE}/gas/taskmsg?${params.toString()}`);
+    if (Number(body.result) !== 1) throw new ChaoxingError('FEED_RESULT_ERROR', `task feed result=${body.result}`);
+    return parseTaskFeed(body);
+  }
+
+  async fetchCourseTasks(courses, limit = 30) {
+    const list = courses.slice(0, limit);
+    const out = [];
+    let index = 0;
+    const workers = Array.from({ length: Math.min(3, list.length || 1) }, async () => {
+      while (index < list.length) {
+        const course = list[index++];
+        for (const kind of ['work', 'exam']) {
+          const url = `${API_BASE}/phone/moocAnalysis/${kind}List?courseId=${encodeURIComponent(course.courseId)}&classId=${encodeURIComponent(course.classId)}`;
+          try {
+            const res = await this._fetch(url);
+            const text = res.text.trim();
+            let tasks = [];
+            if (text.startsWith('{')) {
+              try { tasks = parseTaskFeed(JSON.parse(text.replace(/^\uFEFF/, ''))); } catch (_) { tasks = []; }
+            } else {
+              tasks = kind === 'work' ? parseWorkListHtml(text, HTML_BASE) : parseExamListHtml(text, HTML_BASE);
+            }
+            for (const task of tasks) {
+              task.course = task.course || course.courseName;
+              task.sourceKey = `${task.sourceKey}:${course.classId}`;
+              out.push(task);
+            }
+          } catch (_) { /* best effort */ }
+        }
+      }
+    });
+    await Promise.all(workers);
+    return dedupe(out);
+  }
+
+  async sync() {
+    const started = Date.now();
+    const auth = await this.getAuthStatus();
+    if (!auth.loggedIn) {
+      return {
+        ok: false, code: 'AUTH_REQUIRED', message: '请先打开学习通登录窗口完成登录。',
+        auth, tasks: [], courses: [], durationMs: Date.now() - started
+      };
+    }
+
+    let courses = [];
+    let tasks = [];
+    let source = 'api';
+    let warning = '';
+
+    try {
+      tasks = await this.fetchTaskFeed(auth.uid);
+    } catch (error) {
+      warning = cleanError(error).code;
+      this.telemetry.log('task_feed_error', { ok: false, error, meta: { fallback: true } });
+    }
+
+    try {
+      courses = await this.fetchCourseList();
+    } catch (error) {
+      this.telemetry.log('course_list_error', { ok: false, error });
+    }
+
+    if (!tasks.length) {
+      source = 'fallback';
+      if (courses.length) {
+        tasks = await this.fetchCourseTasks(courses);
+      }
+    }
+
+    tasks = dedupe(tasks);
+    const durationMs = Date.now() - started;
+    this.telemetry.log('sync_complete', {
+      durationMs,
+      ok: tasks.length > 0,
+      meta: {
+        source,
+        courses: courses.length,
+        tasks: tasks.length,
+        waf_fallback: warning === 'WAF_HTML'
+      }
+    });
+    return {
+      ok: true,
+      auth,
+      tasks: tasks.slice(0, 800),
+      courses,
+      pageRows: [],
+      source,
+      warning,
+      durationMs
+    };
+  }
+}
+
+module.exports = { ChaoxingService, ChaoxingError, LOGIN_URL, HOME_URL, cleanError };

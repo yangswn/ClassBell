@@ -20,7 +20,7 @@ const assetsDir = path.join(appRoot, 'src', 'assets');
 const packageJson = JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8'));
 const port = Number(argValue('--port', '48765'));
 const dataDirArg = argValue('--data-dir', '');
-const dataDir = path.resolve(dataDirArg || path.join(process.env.APPDATA || process.cwd(), 'CampusPulse'));
+const dataDir = path.resolve(dataDirArg || path.join(process.env.APPDATA || process.cwd(), 'ClassBell'));
 fs.mkdirSync(dataDir, { recursive: true });
 
 const store = new Store(dataDir);
@@ -265,14 +265,14 @@ async function handleApi(req, res) {
     for (const file of files) out += fs.readFileSync(path.join(dir, file), 'utf8');
     res.writeHead(200, {
       'Content-Type': 'application/x-ndjson; charset=utf-8',
-      'Content-Disposition': 'attachment; filename=CampusPulse-process_logs.jsonl'
+      'Content-Disposition': 'attachment; filename=ClassBell-process_logs.jsonl'
     });
     return res.end(out);
   }
   if (p === '/api/data/export' && method === 'GET') {
     res.writeHead(200, {
       'Content-Type': 'application/json; charset=utf-8',
-      'Content-Disposition': 'attachment; filename=CampusPulse-backup.json'
+      'Content-Disposition': 'attachment; filename=ClassBell-backup.json'
     });
     return res.end(store.exportData());
   }
@@ -460,7 +460,7 @@ server.listen(port, '127.0.0.1', () => {
       meta: { uptime_min: Math.round(process.uptime() / 60), pending: store.stats().pending }
     });
   }, Number(process.env.CAMPUSPULSE_HEARTBEAT_MS) || 5 * 60000);
-  console.log(`CampusPulse server listening on 127.0.0.1:${port}`);
+  console.log(`ClassBell server listening on 127.0.0.1:${port}`);
 });
 
 function shutdown() {

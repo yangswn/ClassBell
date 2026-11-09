@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $installer = Join-Path $root "installer"
 $dist = Join-Path $root "dist"
-$payload = Join-Path $dist "CampusPulse"
+$payload = Join-Path $dist "ClassBell"
 $build = Join-Path $installer "build"
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if (-not (Test-Path $csc)) { throw "csc.exe not found" }
@@ -37,11 +37,11 @@ try {
 
 Push-Location $installer
 try {
-  & $csc /nologo /platform:x64 /target:winexe /out:"$dist\CampusPulse-Setup-1.0.0.exe" /win32icon:"$root\build\icon.ico" `
+  & $csc /nologo /platform:x64 /target:winexe /out:"$dist\ClassBell-Setup-1.0.0.exe" /win32icon:"$root\build\icon.ico" `
     /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `
-    /resource:"$zip",CampusPulse.payload.zip /resource:"$root\LICENSE",CampusPulse.LICENSE.txt `
+    /resource:"$zip",ClassBell.payload.zip /resource:"$root\LICENSE",ClassBell.LICENSE.txt `
     Setup.cs InstallerInfo.cs
   if ($LASTEXITCODE -ne 0) { throw "setup build failed" }
 } finally { Pop-Location }
 
-Write-Host "Installer: $dist\CampusPulse-Setup-1.0.0.exe"
+Write-Host "Installer: $dist\ClassBell-Setup-1.0.0.exe"

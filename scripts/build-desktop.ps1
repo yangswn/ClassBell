@@ -14,7 +14,7 @@ if (-not (Test-Path $core)) { throw "WebView2 SDK missing: $core" }
 
 Push-Location $desktop
 try {
-  & $csc /nologo /platform:x64 /target:winexe /out:CampusPulse.exe /win32manifest:app.manifest /win32icon:"$root\build\icon.ico" `
+  & $csc /nologo /platform:x64 /target:winexe /out:ClassBell.exe /win32manifest:app.manifest /win32icon:"$root\build\icon.ico" `
     /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.Net.Http.dll `
     /r:"$core" /r:"$winforms" `
     Program.cs MainForm.cs LoginForm.cs ReminderForm.cs HostApi.cs AssemblyInfo.cs
@@ -22,4 +22,4 @@ try {
 } finally {
   Pop-Location
 }
-Write-Host "Desktop host built: $desktop\CampusPulse.exe"
+Write-Host "Desktop host built: $desktop\ClassBell.exe"

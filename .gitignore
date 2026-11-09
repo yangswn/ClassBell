@@ -10,3 +10,6 @@ installer/build/
 *.tmp
 *.bak
 data/
+
+install.id
+

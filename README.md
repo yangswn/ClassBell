@@ -1,8 +1,8 @@
-﻿# 课序 CampusPulse
+﻿# 课铃 ClassBell
 
-> 把该做的事放在眼前，剩下的交给课序。
+> 把该做的事放在眼前，剩下的交给课铃。
 
-课序是一个面向大学生的 Windows 轻量课程任务提醒工具：登录学习通后自动读取作业、考试与截止时间，也可以完全离线手动记录课程日程；到期前通过桌面弹窗、托盘和声音提醒。
+课铃是一个面向大学生的 Windows 轻量课程任务提醒工具：登录学习通后自动读取作业、考试与截止时间，也可以完全离线手动记录课程日程；到期前通过桌面弹窗、托盘和声音提醒。
 
 ![今日概览](docs/screenshots/dashboard.png)
 
@@ -22,14 +22,14 @@
 
 ## 安装
 
-安装包：`dist/CampusPulse-Setup-1.0.0.exe`（约 32 MB，64 位 Windows 10/11）。
+安装包：`dist/ClassBell-Setup-1.0.0.exe`（约 32 MB，64 位 Windows 10/11）。
 
 1. 双击安装包，阅读并勾选许可协议，选择安装位置。
 2. 安装器会释放本地服务、WebView2 宿主与图标，创建开始菜单/桌面快捷方式。
 3. 首次启动可选择“连接学习通”或“先手动添加”。
 4. 登录学习通后，回到“学习通同步”点击“同步作业与考试”。
 
-安装不需要管理员权限，默认安装到 `%LOCALAPPDATA%\Programs\CampusPulse`。WebView2 运行时随 Windows 10/11 的 Edge 提供。
+安装不需要管理员权限，默认安装到 `%LOCALAPPDATA%\Programs\ClassBell`。WebView2 运行时随 Windows 10/11 的 Edge 提供。
 
 > 安装包未做商业代码签名，Windows SmartScreen 可能提示“未知发布者”；选择“更多信息 → 仍要运行”即可。正式比赛提交前建议使用学校/个人代码签名证书。
 
@@ -61,12 +61,12 @@
 
 | 内容 | 路径 |
 | --- | --- |
-| 应用数据 | `%APPDATA%\CampusPulse\data.json` |
-| 本地日志 | `%APPDATA%\CampusPulse\process_logs\` |
-| WebView2 数据 | `%APPDATA%\CampusPulse\WebView2\` |
+| 应用数据 | `%APPDATA%\ClassBell\data.json` |
+| 本地日志 | `%APPDATA%\ClassBell\process_logs\` |
+| WebView2 数据 | `%APPDATA%\ClassBell\WebView2\` |
 | Git 镜像（可选） | `<仓库根目录>\process_logs\` |
 
-如果系统拒绝写入 `%APPDATA%`（例如受限的公共电脑），课序会自动回退到安装目录下的 `data\`，保证仍可运行。
+如果系统拒绝写入 `%APPDATA%`（例如受限的公共电脑），课铃会自动回退到安装目录下的 `data\`，保证仍可运行。
 
 日志事件示例：
 
@@ -81,7 +81,7 @@
 ## 技术架构
 
 ```text
-CampusPulse.exe (C# WinForms)
+ClassBell.exe (C# WinForms)
   ├─ WebView2 主窗口  ── HTTP/SSE ──  Node 本地服务
   ├─ 学习通登录窗口 (WebView2)
   ├─ 到期提醒窗口 (WebView2)
@@ -111,8 +111,8 @@ powershell -File scripts\build-setup.ps1
 
 产物：
 
-- `dist\CampusPulse\`：免安装目录（可直接运行 `CampusPulse.exe`）
-- `dist\CampusPulse-Setup-1.0.0.exe`：安装包
+- `dist\ClassBell\`：免安装目录（可直接运行 `ClassBell.exe`）
+- `dist\ClassBell-Setup-1.0.0.exe`：安装包
 
 WebView2 SDK 已放在 `desktop/lib/`；Node 运行时从本机 `node.exe` 复制到 `runtime/node.exe`。
 

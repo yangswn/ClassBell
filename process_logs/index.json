@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-09 17:38:36",
+  "generatedAt": "2026-11-09 18:02:16",
   "appVersion": "1.0.0",
   "totals": {
-    "events": 41,
-    "errors": 0,
-    "syncs": 0,
+    "events": 103,
+    "errors": 7,
+    "syncs": 7,
     "activeDays": 1
   },
   "days": [
@@ -103,15 +103,15 @@
       "day": "2026-11-09",
       "label": "11/9",
       "weekday": "一",
-      "events": 41,
-      "actions": 22,
-      "errors": 0,
+      "events": 103,
+      "actions": 78,
+      "errors": 7,
       "heartbeats": 14,
       "activeMinutes": 70,
-      "durationMs": 0,
-      "syncs": 0,
+      "durationMs": 17691,
+      "syncs": 7,
       "added": 2,
-      "reminders": 5,
+      "reminders": 8,
       "hasData": true
     }
   ]

@@ -5,6 +5,9 @@ const {
   parseBackClazz,
   parseWorkListHtml,
   parseExamListHtml,
+  extractDeadline,
+  parseTimeValue,
+  stripTags,
   dedupe
 } = require('./chaoxing-parser');
 
@@ -25,6 +28,27 @@ function cleanError(error) {
     code: (error && error.code) || 'ERROR',
     message: String((error && error.message) || error).slice(0, 240)
   };
+}
+
+function deadlineFromWorkPage(html) {
+  const raw = String(html || '');
+  const ms = /"(?:taskendtime|endTime|end_time|deadline)"\s*:\s*"?(\d{10,13})/i.exec(raw);
+  if (ms) {
+    const parsed = parseTimeValue(ms[1]);
+    if (parsed) return parsed;
+  }
+  const iso = /"(?:endTime|end_time|deadline|taskendtime)"\s*:\s*"([^"]{4,40})"/i.exec(raw);
+  if (iso) {
+    const parsed = parseTimeValue(iso[1]);
+    if (parsed) return parsed;
+  }
+  const text = stripTags(raw);
+  const labeled = /(?:截止时间|结束时间|提交截止|截止日期|有效期至)\s*[:：]?\s*([^，。；|]{4,48})/.exec(text);
+  if (labeled) {
+    const parsed = extractDeadline(labeled[1]);
+    if (parsed) return parsed;
+  }
+  return null;
 }
 
 class ChaoxingService {
@@ -157,6 +181,39 @@ class ChaoxingService {
     return dedupe(out);
   }
 
+  /**
+   * The H5 work list often carries only a publish date. Fetch the detail pages
+   * for rows that still lack a deadline and parse the actual close time.
+   */
+  async enrichDeadlines(tasks) {
+    const targets = tasks
+      .filter((t) => !t.dueAt && t.sourceUrl && Number(t.remoteStatus || 0) === 0)
+      .slice(0, 40);
+    if (!targets.length) return { checked: 0, found: 0 };
+    const started = Date.now();
+    let index = 0;
+    let found = 0;
+    const workers = Array.from({ length: Math.min(4, targets.length) }, async () => {
+      while (index < targets.length) {
+        const task = targets[index++];
+        try {
+          const res = await this._fetch(task.sourceUrl, { timeout: 12000 });
+          const due = deadlineFromWorkPage(res.text);
+          if (due) {
+            task.dueAt = due.toISOString();
+            found++;
+          }
+        } catch (_) { /* keep as candidate */ }
+      }
+    });
+    await Promise.all(workers);
+    this.telemetry.log('deadline_enrichment', {
+      durationMs: Date.now() - started,
+      meta: { checked: targets.length, found }
+    });
+    return { checked: targets.length, found };
+  }
+
   async sync() {
     const started = Date.now();
     const auth = await this.getAuthStatus();
@@ -191,6 +248,8 @@ class ChaoxingService {
         tasks = await this.fetchCourseTasks(courses);
       }
     }
+
+    if (tasks.length) await this.enrichDeadlines(tasks);
 
     tasks = dedupe(tasks);
     const durationMs = Date.now() - started;

@@ -122,7 +122,9 @@ function isCompletedStatus(value) {
   if (typeof value === 'number') return value > 0;
   const text = String(value || '');
   if (/^[1-9]\d*$/.test(text)) return true;
-  return /已完成|已提交|已批阅|已交|已完成|已结束|已过期/.test(text);
+  // "已过期/已结束" means the deadline has passed, not that the student
+  // submitted it. Keep those rows so overdue-but-unfinished work is recorded.
+  return /已完成|已提交|已批阅|已交|已通过/.test(text);
 }
 
 function parseTaskFeed(body) {

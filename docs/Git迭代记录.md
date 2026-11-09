@@ -3,6 +3,8 @@
 日期：2026-11-09  
 仓库：`campus-pulse/`（本地 Git，可推送 GitHub）
 
+> 历史提交信息中的 `CampusPulse` 是开发期代号；1.0.0 对外名称已统一为 **课铃 ClassBell**，功能与数据路径以当前代码为准。
+
 ## 提交 1 — 核心程序与日志驱动修复
 
 `cfee329 feat: CampusPulse WebView2 desktop app, Chaoxing sync, reminders, telemetry`
@@ -34,7 +36,7 @@
 
 包含：
 
-- `process_logs/2026-11-09.jsonl`：41 条真实事件、4 次启动；
+- `process_logs/2026-11-09.jsonl`：103 条真实事件、9 次启动；
 - `process_logs/index.json`：最近 7 天聚合；
 - `process_logs/README.md`：字段与诚信声明。
 

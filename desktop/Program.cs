@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace CampusPulse
+namespace ClassBell
 {
     internal static class Program
     {
@@ -17,7 +17,7 @@ namespace CampusPulse
         private static void Main(string[] args)
         {
             bool created;
-            using (var mutex = new Mutex(true, "CampusPulse.WebView2.SingleInstance", out created))
+            using (var mutex = new Mutex(true, "ClassBell.WebView2.SingleInstance", out created))
             {
                 if (!created)
                 {
@@ -33,7 +33,7 @@ namespace CampusPulse
 
         private static void BringExistingToFront()
         {
-            foreach (var process in Process.GetProcessesByName("CampusPulse"))
+            foreach (var process in Process.GetProcessesByName("ClassBell"))
             {
                 if (process.MainWindowHandle != IntPtr.Zero)
                 {

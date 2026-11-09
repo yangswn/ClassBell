@@ -1,7 +1,7 @@
 'use strict';
 
 /* ==========================================================================
-   课序 CampusPulse — renderer
+   课铃 ClassBell — renderer
    ========================================================================== */
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -42,6 +42,7 @@ const EVENT_LABEL = {
   sync_start: '开始同步',
   sync_complete: '接口同步完成',
   sync_merge: '合并识别结果',
+  deadline_enrichment: '补全截止时间',
   sync_failed: '同步失败',
   task_feed_error: '作业接口异常',
   course_list_error: '课程列表异常',

@@ -197,7 +197,7 @@ class Telemetry {
         heartbeats,
         activeMinutes: heartbeats * 5,
         durationMs: duration,
-        syncs: entries.filter((e) => e.event === 'sync_ok').length,
+        syncs: entries.filter((e) => e.event === 'sync_complete' || e.event === 'sync_ok').length,
         added: entries.filter((e) => e.event === 'task_added').length,
         reminders: entries.filter((e) => e.event === 'reminder_fired').length,
         hasData: entries.length > 0

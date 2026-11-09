@@ -6,13 +6,14 @@ using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Win32;
 
-namespace CampusPulse
+namespace ClassBell
 {
     internal sealed class MainForm : Form
     {
@@ -40,12 +41,25 @@ namespace CampusPulse
 
         public CoreWebView2Environment WebViewEnvironment { get; private set; }
 
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        private void ApplyDpiZoom()
+        {
+            try
+            {
+                uint dpi = GetDpiForWindow(webView.Handle);
+                if (dpi >= 96) webView.ZoomFactor = Math.Max(0.5, 96.0 / dpi);
+            }
+            catch { }
+        }
+
         public MainForm(bool hidden)
         {
             startHidden = hidden;
             appDir = AppDomain.CurrentDomain.BaseDirectory;
             dataDir = ResolveDataDir();
-            Text = "课序 CampusPulse";
+            Text = "课铃 ClassBell";
             StartPosition = FormStartPosition.CenterScreen;
             Width = 1280;
             Height = 860;
@@ -63,7 +77,7 @@ namespace CampusPulse
 
             splash = new Label();
             splash.Dock = DockStyle.Fill;
-            splash.Text = "课序正在启动…";
+            splash.Text = "课铃正在启动…";
             splash.TextAlign = ContentAlignment.MiddleCenter;
             splash.Font = new Font("Microsoft YaHei UI", 13F);
             splash.ForeColor = Color.FromArgb(90, 100, 92);
@@ -81,7 +95,7 @@ namespace CampusPulse
         {
             string portable = Path.Combine(appDir, "data");
             if (File.Exists(Path.Combine(portable, "data.json"))) return portable;
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CampusPulse");
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClassBell");
             try
             {
                 Directory.CreateDirectory(dir);
@@ -115,14 +129,15 @@ namespace CampusPulse
                 bool ready = await WaitForHealthAsync();
                 if (!ready) throw new Exception("本地服务未能在限定时间内启动。");
                 await InitializeWebViewAsync();
+                await RestoreLoginAsync();
                 await LoadSettingsOnceAsync();
                 StartTimers();
                 await PollStatusAsync();
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "课序启动失败：\n" + ex.Message + "\n\n日志目录：" + Path.Combine(dataDir, "process_logs"),
-                    "课序 CampusPulse", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, "课铃启动失败：\n" + ex.Message + "\n\n日志目录：" + Path.Combine(dataDir, "process_logs"),
+                    "课铃 ClassBell", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 exiting = true;
                 Close();
             }
@@ -194,6 +209,35 @@ namespace CampusPulse
             return false;
         }
 
+        private async Task RestoreLoginAsync()
+        {
+            try
+            {
+                if (webView.CoreWebView2 == null) return;
+                var cookies = await webView.CoreWebView2.CookieManager.GetCookiesAsync("https://i.chaoxing.com/");
+                bool hasUid = false;
+                var list = new List<Dictionary<string, string>>();
+                foreach (var cookie in cookies)
+                {
+                    if (cookie.Name == "_uid" || cookie.Name == "UID" || cookie.Name == "puid") hasUid = true;
+                    list.Add(new Dictionary<string, string>
+                    {
+                        { "name", cookie.Name },
+                        { "value", cookie.Value },
+                        { "domain", cookie.Domain },
+                        { "path", cookie.Path }
+                    });
+                }
+                if (!hasUid) return;
+                await HostApi.PostJsonAsync("/api/cx/cookies", new Dictionary<string, object> { { "cookies", list } });
+                SafeLog("restored persisted Chaoxing cookies: " + list.Count);
+            }
+            catch (Exception ex)
+            {
+                SafeLog("restore cookies failed: " + ex.Message);
+            }
+        }
+
         private async Task InitializeWebViewAsync()
         {
             string userData = Path.Combine(dataDir, "WebView2");
@@ -204,6 +248,7 @@ namespace CampusPulse
             var env = await CoreWebView2Environment.CreateAsync(null, userData, options);
             WebViewEnvironment = env;
             await webView.EnsureCoreWebView2Async(env);
+            ApplyDpiZoom();
             webView.CoreWebView2.Settings.AreDevToolsEnabled = !string.IsNullOrWhiteSpace(debugPort);
             webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
@@ -286,7 +331,7 @@ namespace CampusPulse
                     int pending = 0;
                     try { pending = Convert.ToInt32(stats["pending"]); } catch { }
                     pendingItem.Text = "待完成 " + pending + " 项";
-                    tray.Text = "课序 CampusPulse · " + pending + " 项待完成";
+                    tray.Text = "课铃 ClassBell · " + pending + " 项待完成";
                 }
                 if (settings != null && settingsLoaded)
                 {
@@ -496,7 +541,7 @@ namespace CampusPulse
             if (firstHideBalloon && tray != null)
             {
                 firstHideBalloon = false;
-                tray.BalloonTipTitle = "课序仍在运行";
+                tray.BalloonTipTitle = "课铃仍在运行";
                 tray.BalloonTipText = "窗口已收起到托盘，截止提醒仍会弹出。";
                 tray.BalloonTipIcon = ToolTipIcon.Info;
                 tray.ShowBalloonTip(2800);
@@ -563,10 +608,10 @@ namespace CampusPulse
             catch { icon = SystemIcons.Application; }
             tray = new NotifyIcon();
             tray.Icon = icon;
-            tray.Text = "课序 CampusPulse";
+            tray.Text = "课铃 ClassBell";
             tray.Visible = true;
             var menu = new ContextMenuStrip();
-            menu.Items.Add("打开课序", null, (s, e) => ShowMain());
+            menu.Items.Add("打开课铃", null, (s, e) => ShowMain());
             pendingItem = new ToolStripMenuItem("待完成 0 项") { Enabled = false };
             menu.Items.Add(pendingItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -602,7 +647,7 @@ namespace CampusPulse
                 catch { }
             };
             menu.Items.Add(autoLaunchItem);
-            menu.Items.Add("退出课序", null, (s, e) =>
+            menu.Items.Add("退出课铃", null, (s, e) =>
             {
                 exiting = true;
                 Close();
@@ -619,8 +664,8 @@ namespace CampusPulse
                 using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
                 {
                     if (key == null) return;
-                    if (enabled) key.SetValue("CampusPulse", "\"" + Application.ExecutablePath + "\" --hidden");
-                    else key.DeleteValue("CampusPulse", false);
+                    if (enabled) key.SetValue("ClassBell", "\"" + Application.ExecutablePath + "\" --hidden");
+                    else key.DeleteValue("ClassBell", false);
                 }
             }
             catch { }

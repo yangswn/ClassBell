@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-namespace CampusPulse
+namespace ClassBell
 {
     internal sealed class LoginForm : Form
     {
@@ -21,12 +22,15 @@ namespace CampusPulse
         private bool logged;
         private string lastUrl = "";
 
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
         public LoginForm(string dataDir, MainForm owner, CoreWebView2Environment environment)
         {
             this.dataDir = dataDir;
             this.owner = owner;
             this.sharedEnvironment = environment;
-            Text = "学习通登录 · 课序 CampusPulse";
+            Text = "学习通登录 · 课铃 ClassBell";
             StartPosition = FormStartPosition.CenterParent;
             Width = 1000;
             Height = 780;
@@ -74,6 +78,12 @@ namespace CampusPulse
                     env = await CoreWebView2Environment.CreateAsync(null, System.IO.Path.Combine(dataDir, "WebView2"), null);
                 }
                 await webView.EnsureCoreWebView2Async(env);
+                try
+                {
+                    uint dpi = GetDpiForWindow(webView.Handle);
+                    if (dpi >= 96) webView.ZoomFactor = Math.Max(0.5, 96.0 / dpi);
+                }
+                catch { }
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 webView.CoreWebView2.NavigationCompleted += async (s, e) => await CheckCookiesAsync();
@@ -93,7 +103,7 @@ namespace CampusPulse
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "无法打开学习通登录页：\n" + ex.Message, "课序 CampusPulse",
+                MessageBox.Show(this, "无法打开学习通登录页：\n" + ex.Message, "课铃 ClassBell",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }

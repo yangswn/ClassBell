@@ -1,11 +1,11 @@
 {
-  "name": "campus-pulse",
-  "productName": "CampusPulse",
+  "name": "classbell",
+  "productName": "ClassBell",
   "version": "1.0.0",
-  "description": "课序 CampusPulse - 课程作业自动识别与到期提醒工具",
+  "description": "课铃 ClassBell - 课程作业自动识别与到期提醒工具",
   "main": "server/server.js",
   "author": {
-    "name": "CampusPulse"
+    "name": "ClassBell"
   },
   "license": "MIT",
   "private": true,

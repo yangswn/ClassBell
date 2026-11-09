@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>课序 CampusPulse</title>
+  <title>课铃 ClassBell</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -43,7 +43,7 @@
     <header class="titlebar" id="titlebar">
       <div class="brand no-drag">
         <img src="assets/icon.png" alt="" class="brand-icon" />
-        <div class="brand-text"><strong>课序</strong><span>CampusPulse</span></div>
+        <div class="brand-text"><strong>课铃</strong><span>ClassBell</span></div>
       </div>
       <div class="titlebar-status no-drag" id="titlebar-status">
         <span class="status-dot"></span>
@@ -60,7 +60,7 @@
       <aside class="sidebar">
         <div class="sidebar-brand">
           <img src="assets/icon.png" alt="" />
-          <div><strong>课序</strong><span>CAMPUSPULSE</span></div>
+          <div><strong>课铃</strong><span>CLASSBELL</span></div>
         </div>
         <nav class="nav" aria-label="主导航">
           <button class="nav-item active" data-page="dashboard"><svg><use href="#i-grid"/></svg><span>今日概览</span><em class="nav-badge" id="nav-badge"></em></button>
@@ -88,7 +88,7 @@
             <div>
               <div class="eyebrow" id="dash-date">周一 · 11月9日</div>
               <h1 id="dash-title">今天，稳一点。</h1>
-              <p class="page-sub" id="dash-sub">把该做的事放在眼前，剩下的交给课序。</p>
+              <p class="page-sub" id="dash-sub">把该做的事放在眼前，剩下的交给课铃。</p>
             </div>
             <div class="page-actions">
               <button class="btn btn-ghost" id="btn-sync-top"><svg><use href="#i-sync"/></svg><span>同步学习通</span></button>
@@ -99,7 +99,7 @@
           <div class="welcome-card" id="welcome-card" hidden>
             <div class="welcome-mark"><svg><use href="#i-spark"/></svg></div>
             <div class="welcome-copy">
-              <strong>第一次使用课序？</strong>
+              <strong>第一次使用课铃？</strong>
               <p>登录学习通后会自动识别作业与考试；不登录也能手动记录课程日程。</p>
             </div>
             <div class="welcome-actions">
@@ -203,7 +203,7 @@
             <div>
               <div class="eyebrow">学习通同步</div>
               <h1 id="cx-title">登录一次，作业自己走过来。</h1>
-              <p class="page-sub">在独立的登录窗口完成学习通登录，课序会读取作业、考试与截止时间。密码只由学习通页面处理。</p>
+              <p class="page-sub">在独立的登录窗口完成学习通登录，课铃会读取作业、考试与截止时间。密码只由学习通页面处理。</p>
             </div>
             <div class="page-actions">
               <button class="btn btn-ghost" id="btn-cx-home"><svg><use href="#i-external"/></svg><span>打开学习通登录</span></button>
@@ -230,9 +230,9 @@
                   <div class="login-copy">
                     <span class="login-eyebrow">超星学习通 · 安全登录</span>
                     <h2>在独立窗口中完成登录</h2>
-                    <p>登录窗口由本机 WebView2 打开，密码只交给学习通页面处理。登录成功后，课序会读取你本人有权访问的作业、考试与截止时间。</p>
+                    <p>登录窗口由本机 WebView2 打开，密码只交给学习通页面处理。登录成功后，课铃会读取你本人有权访问的作业、考试与截止时间。</p>
                     <button class="btn btn-primary" id="btn-cx-open-login"><svg><use href="#i-external"/></svg>打开学习通登录窗口</button>
-                    <span class="login-note"><svg><use href="#i-shield"/></svg>Cookie 仅保存在本机，课序不上传账号密码</span>
+                    <span class="login-note"><svg><use href="#i-shield"/></svg>Cookie 仅保存在本机，课铃不上传账号密码</span>
                   </div>
                 </div>
                 <div class="webview-loading" id="cx-loading" hidden>
@@ -401,7 +401,7 @@
               </div>
 
               <div class="panel settings-panel about-panel">
-                <div class="about-brand"><img src="assets/icon.png" alt="" /><div><strong>课序 CampusPulse</strong><span id="about-version">v1.0.0</span></div></div>
+                <div class="about-brand"><img src="assets/icon.png" alt="" /><div><strong>课铃 ClassBell</strong><span id="about-version">v1.0.0</span></div></div>
                 <p>面向大学生的轻量课程任务提醒工具。非学习通官方产品，仅读取你本人有权访问的课程数据。</p>
                 <div class="about-links">
                   <button class="link-btn" id="btn-open-data-2"><svg><use href="#i-folder"/></svg>数据目录</button>
@@ -479,13 +479,13 @@
     <div class="modal modal-medium" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
       <div class="modal-head"><div><span class="modal-eyebrow">隐私</span><h2 id="privacy-title">数据如何处理</h2></div><button class="icon-btn" id="privacy-close" aria-label="关闭"><svg><use href="#i-x"/></svg></button></div>
       <div class="privacy-body">
-        <p>课序是本地优先的桌面工具，不运营云端账号系统，也不会上传你的学习通密码。</p>
+        <p>课铃是本地优先的桌面工具，不运营云端账号系统，也不会上传你的学习通密码。</p>
         <ul>
-          <li>登录在 Electron 内嵌浏览器中完成，Cookie 由 Chromium 的独立分区保存；课序只读取登录状态与课程任务接口。</li>
+          <li>登录在 Electron 内嵌浏览器中完成，Cookie 由 Chromium 的独立分区保存；课铃只读取登录状态与课程任务接口。</li>
           <li>任务、设置、备份都保存在本机用户目录，可随时导出或删除。</li>
           <li>运行日志不记录账号、密码、课程标题、作业正文或完整 URL，仅记录事件、耗时、频次与错误码。</li>
           <li>日志镜像到 Git 仓库是可选操作，由你手动选择目录；默认只写本机。</li>
-          <li>课序不是学习通官方产品，不提供代刷、自动提交作业等违反平台规则的功能。</li>
+          <li>课铃不是学习通官方产品，不提供代刷、自动提交作业等违反平台规则的功能。</li>
         </ul>
       </div>
       <div class="modal-foot"><div></div><div class="modal-foot-right"><button class="btn btn-primary" id="privacy-ok">知道了</button></div></div>

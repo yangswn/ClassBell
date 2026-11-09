@@ -1,5 +1,5 @@
 /**
- * CampusPulse icon generator — no native dependencies.
+ * ClassBell icon generator — no native dependencies.
  *
  * Renders a rounded-square "calendar + check" mark at several sizes with
  * 4x supersampling, writes PNG files and a multi-size Windows .ico.

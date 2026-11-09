@@ -459,6 +459,7 @@ class Store {
           duplicate.sourceUrl = remote.sourceUrl || duplicate.sourceUrl;
           stats.updated += 1;
         }
+        this.state.candidates = this.state.candidates.filter((c) => c.sourceKey !== sourceKey);
         continue;
       }
 
@@ -482,6 +483,7 @@ class Store {
           reminderOffsets: this.state.settings.reminderOffsets
         });
         this.state.tasks.push(created);
+        this.state.candidates = this.state.candidates.filter((c) => c.sourceKey !== sourceKey);
         bySource.set(sourceKey, created);
         byFingerprint.set(fingerprint, created);
         this.state.metrics.totalAdded += 1;
@@ -519,7 +521,7 @@ class Store {
 
   exportData() {
     return JSON.stringify({
-      app: 'CampusPulse',
+      app: 'ClassBell',
       schema: SCHEMA,
       exportedAt: nowIso(),
       tasks: this.state.tasks,

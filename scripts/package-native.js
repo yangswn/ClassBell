@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const outDir = path.join(root, 'dist', 'CampusPulse');
+const outDir = path.join(root, 'dist', 'ClassBell');
 const desktop = path.join(root, 'desktop');
 const lib = path.join(desktop, 'lib');
 const nodeExe = process.env.CAMPUSPULSE_NODE || 'C:\\Program Files\\nodejs\\node.exe';
@@ -18,8 +18,8 @@ function copy(src, dest) {
   fs.copyFileSync(src, dest);
 }
 
-if (!fs.existsSync(path.join(desktop, 'CampusPulse.exe'))) {
-  throw new Error('desktop/CampusPulse.exe is missing; compile the host first.');
+if (!fs.existsSync(path.join(desktop, 'ClassBell.exe'))) {
+  throw new Error('desktop/ClassBell.exe is missing; compile the host first.');
 }
 if (!fs.existsSync(nodeExe)) {
   throw new Error('node.exe not found at ' + nodeExe);
@@ -28,7 +28,7 @@ if (!fs.existsSync(nodeExe)) {
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
-copy(path.join(desktop, 'CampusPulse.exe'), path.join(outDir, 'CampusPulse.exe'));
+copy(path.join(desktop, 'ClassBell.exe'), path.join(outDir, 'ClassBell.exe'));
 copy(path.join(lib, 'Microsoft.Web.WebView2.Core.dll'), path.join(outDir, 'Microsoft.Web.WebView2.Core.dll'));
 copy(path.join(lib, 'Microsoft.Web.WebView2.WinForms.dll'), path.join(outDir, 'Microsoft.Web.WebView2.WinForms.dll'));
 copy(path.join(lib, 'WebView2Loader.dll'), path.join(outDir, 'WebView2Loader.dll'));
@@ -48,10 +48,10 @@ const nodeLicense = path.join(path.dirname(nodeExe), 'LICENSE');
 if (fs.existsSync(nodeLicense)) copy(nodeLicense, path.join(outDir, 'runtime', 'LICENSE-node.txt'));
 
 const pkg = {
-  name: 'campus-pulse',
-  productName: 'CampusPulse',
+  name: 'classbell',
+  productName: 'ClassBell',
   version: require(path.join(root, 'package.json')).version,
-  description: '课序 CampusPulse - 课程作业自动识别与到期提醒工具',
+  description: '课铃 ClassBell - 课程作业自动识别与到期提醒工具',
   main: 'server/server.js',
   license: 'MIT'
 };

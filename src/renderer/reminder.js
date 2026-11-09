@@ -44,7 +44,7 @@ function kickerFor(p) {
 
 function render(p) {
   payload = p;
-  document.title = `课序提醒 · ${p.title || '任务'}`;
+  document.title = `课铃提醒 · ${p.title || '任务'}`;
   $('#r-kicker').textContent = kickerFor(p);
   $('#r-course').textContent = p.course || (p.category === 'exam' ? '考试提醒' : '课程任务');
   $('#r-title').textContent = p.title || '任务提醒';

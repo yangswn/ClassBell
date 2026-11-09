@@ -4,11 +4,12 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Media;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-namespace CampusPulse
+namespace ClassBell
 {
     internal sealed class ReminderForm : Form
     {
@@ -18,6 +19,9 @@ namespace CampusPulse
         private readonly CoreWebView2Environment environment;
         private WebView2 webView;
         private System.Windows.Forms.Timer lifeTimer;
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
 
         public ReminderForm(int port, Dictionary<string, object> payload, MainForm owner, CoreWebView2Environment environment)
         {
@@ -78,10 +82,16 @@ namespace CampusPulse
                 if (env == null)
                 {
                     env = await CoreWebView2Environment.CreateAsync(null,
-                        System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CampusPulse", "WebView2"),
+                        System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClassBell", "WebView2"),
                         null);
                 }
                 await webView.EnsureCoreWebView2Async(env);
+                try
+                {
+                    uint dpi = GetDpiForWindow(webView.Handle);
+                    if (dpi >= 96) webView.ZoomFactor = Math.Max(0.5, 96.0 / dpi);
+                }
+                catch { }
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 webView.CoreWebView2.WebMessageReceived += OnWebMessage;
@@ -94,7 +104,7 @@ namespace CampusPulse
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "无法显示提醒：\n" + ex.Message, "课序 CampusPulse");
+                MessageBox.Show(this, "无法显示提醒：\n" + ex.Message, "课铃 ClassBell");
                 Close();
             }
         }

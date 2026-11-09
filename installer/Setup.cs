@@ -8,15 +8,15 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace CampusPulse.Setup
+namespace ClassBell.Setup
 {
     internal static class Program
     {
-        internal const string AppName = "课序 CampusPulse";
+        internal const string AppName = "课铃 ClassBell";
         internal const string Version = "1.0.0";
-        internal const string Publisher = "CampusPulse";
-        internal const string ExeName = "CampusPulse.exe";
-        internal const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\CampusPulse";
+        internal const string Publisher = "ClassBell";
+        internal const string ExeName = "ClassBell.exe";
+        internal const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ClassBell";
 
         [STAThread]
         private static void Main(string[] args)
@@ -57,8 +57,27 @@ namespace CampusPulse.Setup
         {
             get
             {
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Programs", "CampusPulse");
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                string[] candidates =
+                {
+                    Path.Combine(local, "Programs", "ClassBell"),
+                    Path.Combine(local, "ClassBell"),
+                    Path.Combine(documents, "ClassBell")
+                };
+                foreach (string candidate in candidates)
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(candidate);
+                        string probe = Path.Combine(candidate, ".write-test");
+                        File.WriteAllText(probe, "ok");
+                        File.Delete(probe);
+                        return candidate;
+                    }
+                    catch { }
+                }
+                return candidates[0];
             }
         }
 
@@ -107,7 +126,7 @@ namespace CampusPulse.Setup
             }
 
             string exe = Path.Combine(dir, ExeName);
-            if (!File.Exists(exe)) throw new Exception("安装包解压后缺少 CampusPulse.exe。");
+            if (!File.Exists(exe)) throw new Exception("安装包解压后缺少 ClassBell.exe。");
 
             try
             {
@@ -117,7 +136,7 @@ namespace CampusPulse.Setup
                 string group = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), AppName);
                 Directory.CreateDirectory(group);
                 CreateShortcut(Path.Combine(group, AppName + ".lnk"), exe, dir);
-                CreateShortcut(Path.Combine(group, "卸载课序.lnk"), Path.Combine(dir, "Uninstall.exe"), dir);
+                CreateShortcut(Path.Combine(group, "卸载课铃.lnk"), Path.Combine(dir, "Uninstall.exe"), dir);
             }
             catch (Exception ex)
             {
@@ -139,7 +158,7 @@ namespace CampusPulse.Setup
                     key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
                     key.SetValue("EstimatedSize", 96000, RegistryValueKind.DWord);
                 }
-                using (var key = Registry.CurrentUser.CreateSubKey(@"Software\CampusPulse"))
+                using (var key = Registry.CurrentUser.CreateSubKey(@"Software\ClassBell"))
                     key.SetValue("InstallDir", dir);
             }
             catch (Exception ex)
@@ -159,7 +178,7 @@ namespace CampusPulse.Setup
         {
             try
             {
-                foreach (var process in Process.GetProcessesByName("CampusPulse"))
+                foreach (var process in Process.GetProcessesByName("ClassBell"))
                 {
                     try { if (!process.HasExited) process.Kill(); } catch { }
                 }
@@ -182,7 +201,7 @@ namespace CampusPulse.Setup
         {
             using (var stream = FindResource(".txt"))
             {
-                if (stream == null) return "MIT License\n\nCopyright (c) 2026 CampusPulse";
+                if (stream == null) return "MIT License\n\nCopyright (c) 2026 ClassBell";
                 using (var reader = new StreamReader(stream))
                     return reader.ReadToEnd();
             }
@@ -208,7 +227,7 @@ namespace CampusPulse.Setup
         {
             try
             {
-                File.AppendAllText(Path.Combine(Path.GetTempPath(), "CampusPulse-install.log"),
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "ClassBell-install.log"),
                     DateTime.Now.ToString("s") + " " + message + Environment.NewLine);
             }
             catch { }
@@ -228,7 +247,7 @@ namespace CampusPulse.Setup
 
         public SetupForm()
         {
-            Text = "课序 CampusPulse 安装程序";
+            Text = "课铃 ClassBell 安装程序";
             ClientSize = new Size(680, 500);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -249,7 +268,7 @@ namespace CampusPulse.Setup
             };
             var title = new Label
             {
-                Text = "课序 CampusPulse",
+                Text = "课铃 ClassBell",
                 ForeColor = Color.FromArgb(250, 246, 234),
                 Font = new Font("Microsoft YaHei UI", 18F, FontStyle.Bold),
                 AutoSize = true,
@@ -270,7 +289,7 @@ namespace CampusPulse.Setup
 
             var intro = new Label
             {
-                Text = "课序会把作业、考试与自定义日程放在一个清晰的窗口里。安装包包含本地服务与 WebView2 桌面宿主，安装不需要管理员权限。",
+                Text = "课铃会把作业、考试与自定义日程放在一个清晰的窗口里。安装包包含本地服务与 WebView2 桌面宿主，安装不需要管理员权限。",
                 ForeColor = Color.FromArgb(86, 96, 88),
                 Location = new Point(34, 128),
                 Size = new Size(612, 44)
@@ -284,7 +303,7 @@ namespace CampusPulse.Setup
             var browse = new Button { Text = "浏览…", Location = new Point(556, 207), Width = 90, Height = 30 };
             browse.Click += (s, e) =>
             {
-                using (var dialog = new FolderBrowserDialog { Description = "选择课序的安装位置", SelectedPath = pathBox.Text })
+                using (var dialog = new FolderBrowserDialog { Description = "选择课铃的安装位置", SelectedPath = pathBox.Text })
                 {
                     if (dialog.ShowDialog(this) == DialogResult.OK) pathBox.Text = dialog.SelectedPath;
                 }
@@ -322,7 +341,7 @@ namespace CampusPulse.Setup
 
             var note = new Label
             {
-                Text = "数据默认保存在 %APPDATA%\\CampusPulse；卸载时可以选择保留。",
+                Text = "数据默认保存在 %APPDATA%\\ClassBell；卸载时可以选择保留。",
                 ForeColor = Color.FromArgb(130, 137, 129),
                 Location = new Point(34, 322),
                 Size = new Size(610, 24)
@@ -382,13 +401,13 @@ namespace CampusPulse.Setup
             };
             var text = new Label
             {
-                Text = "课序已经准备好。登录学习通后会自动识别作业，也可以先手动记录日程。",
+                Text = "课铃已经准备好。登录学习通后会自动识别作业，也可以先手动记录日程。",
                 ForeColor = Color.FromArgb(110, 118, 110),
                 Location = new Point(118, 222),
                 Size = new Size(450, 24),
                 TextAlign = ContentAlignment.MiddleCenter
             };
-            var launch = new CheckBox { Text = "立即启动课序 CampusPulse", Checked = true, Location = new Point(260, 268), AutoSize = true };
+            var launch = new CheckBox { Text = "立即启动课铃 ClassBell", Checked = true, Location = new Point(260, 268), AutoSize = true };
             var done = new Button
             {
                 Text = "完成",
@@ -456,7 +475,7 @@ namespace CampusPulse.Setup
     {
         public LicenseForm()
         {
-            Text = "课序 CampusPulse · 许可协议";
+            Text = "课铃 ClassBell · 许可协议";
             ClientSize = new Size(620, 520);
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;

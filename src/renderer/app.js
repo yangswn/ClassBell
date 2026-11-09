@@ -231,7 +231,23 @@ function pendingTasks() {
 }
 
 function nextPendingTask() {
-  return pendingTasks().find((t) => !t.noDeadline) || null;
+  const list = pendingTasks().filter((t) => !t.noDeadline);
+  // Prefer what is still ahead; only fall back to a missed deadline when
+  // nothing upcoming is left.
+  return list.find((t) => new Date(t.dueAt).getTime() >= Date.now()) || list[0] || null;
+}
+
+function pendingUpcoming() {
+  const now = Date.now();
+  const list = pendingTasks();
+  const future = list
+    .filter((t) => !t.noDeadline && new Date(t.dueAt).getTime() >= now)
+    .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
+  const longTerm = list.filter((t) => t.noDeadline);
+  const past = list
+    .filter((t) => !t.noDeadline && new Date(t.dueAt).getTime() < now)
+    .sort((a, b) => new Date(b.dueAt) - new Date(a.dueAt));
+  return [...future, ...longTerm, ...past];
 }
 
 function summarizeMeta(meta) {
@@ -425,10 +441,13 @@ function renderDashboard() {
   else title = '晚上好，把今天收好。';
   $('#dash-title').textContent = title.replace('。', `${name}。`).replace(`${name}${name}`, name);
   const pending = pendingTasks();
-  const nextTimed = pending.find((t) => !t.noDeadline);
+  const nextTimed = App.nextTask || pending.find((t) => !t.noDeadline);
+  const overdueOnly = nextTimed && new Date(nextTimed.dueAt).getTime() < Date.now();
   $('#dash-sub').textContent = pending.length
     ? (nextTimed
-      ? `还有 ${pending.length} 项待完成，最近一项在 ${dayLabel(nextTimed.dueAt)} ${fmtTime(nextTimed.dueAt)}。`
+      ? (overdueOnly
+        ? `还有 ${pending.length} 项待完成，接下来的都还没有截止时间；已过期的已放到列表末尾。`
+        : `还有 ${pending.length} 项待完成，最近一项在 ${dayLabel(nextTimed.dueAt)} ${fmtTime(nextTimed.dueAt)}。`)
       : `还有 ${pending.length} 项长期任务，完成即可，不设截止时间。`)
     : '目前没有待办。可以新建日程，或连接学习通自动同步。';
 
@@ -482,7 +501,7 @@ function renderHero() {
 
 function renderUpcoming() {
   const container = $('#upcoming-list');
-  const tasks = pendingTasks().slice(0, 5);
+  const tasks = pendingUpcoming().slice(0, 5);
   if (!tasks.length) {
     container.innerHTML = `
       <div class="empty-state" style="padding:34px 16px 36px">
@@ -598,15 +617,19 @@ function renderTasks() {
     groups.get(key).push(task);
   }
 
+  const rank = (key) => {
+    if (key === 'missed') return 90;
+    if (key === 'overdue') return 80;
+    if (key === 'nodeadline') return 70;
+    if (key === 'done') return 100;
+    return 0;
+  };
+  // Upcoming days first (soonest on top); everything already gone last, so the
+  // list opens on what still matters instead of on history.
   const order = [...groups.keys()].sort((a, b) => {
-    if (a === 'missed') return -1;
-    if (b === 'missed') return 1;
-    if (a === 'overdue') return -1;
-    if (b === 'overdue') return 1;
-    if (a === 'done') return 1;
-    if (b === 'done') return -1;
-    if (a === 'nodeadline') return 1;
-    if (b === 'nodeadline') return -1;
+    const diff = rank(a) - rank(b);
+    if (diff !== 0) return diff;
+    if (rank(a) !== 0) return 0;
     return a.localeCompare(b);
   });
 

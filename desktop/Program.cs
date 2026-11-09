@@ -19,6 +19,10 @@ namespace ClassBell
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int max);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int RegisterWindowMessage(string message);
+        [DllImport("user32.dll")]
+        private static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
         private delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
 
@@ -30,6 +34,20 @@ namespace ClassBell
             {
                 if (!created)
                 {
+                    try
+                    {
+                        int msg = RegisterWindowMessage("ClassBell.ShowWindow");
+                        PostMessage((IntPtr)0xFFFF, msg, IntPtr.Zero, IntPtr.Zero);
+                    }
+                    catch { }
+                    try
+                    {
+                        using (var show = EventWaitHandle.OpenExisting("ClassBell.ShowWindow"))
+                        {
+                            show.Set();
+                        }
+                    }
+                    catch { }
                     BringExistingToFront();
                     return;
                 }

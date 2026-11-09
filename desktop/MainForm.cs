@@ -7,6 +7,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -38,11 +39,27 @@ namespace ClassBell
         private bool settingsLoaded;
         private bool pollingReminders;
         private int port;
+        private EventWaitHandle showEvent;
 
         public CoreWebView2Environment WebViewEnvironment { get; private set; }
 
         [DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint modifiers, uint vk);
+
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int RegisterWindowMessage(string message);
+
+        private static readonly int ShowMessage = RegisterWindowMessage("ClassBell.ShowWindow");
+
+        private const int HotKeyId = 0x4B1;
+        private const int WmHotKey = 0x0312;
+        private bool hotKeyRegistered;
 
         private void ApplyDpiZoom()
         {
@@ -86,9 +103,63 @@ namespace ClassBell
             splash.BringToFront();
 
             CreateTray();
+            try
+            {
+                showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "ClassBell.ShowWindow");
+                var waiter = new Thread(() =>
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                            showEvent.WaitOne();
+                            BeginInvoke(new Action(ShowMain));
+                        }
+                        catch { break; }
+                    }
+                });
+                waiter.IsBackground = true;
+                waiter.Start();
+            }
+            catch { }
             Shown += async (s, e) => await StartAsync();
             FormClosing += OnFormClosing;
             Resize += (s, e) => { if (WindowState == FormWindowState.Minimized && closeToTray) HideToTray(); };
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            try
+            {
+                hotKeyRegistered = RegisterHotKey(Handle, HotKeyId, 0x0002 | 0x0001, (uint)Keys.B);
+            }
+            catch { }
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            if (hotKeyRegistered)
+            {
+                try { UnregisterHotKey(Handle, HotKeyId); } catch { }
+                hotKeyRegistered = false;
+            }
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WmHotKey && m.WParam.ToInt32() == HotKeyId)
+            {
+                ShowMain();
+                return;
+            }
+            if (m.Msg == ShowMessage)
+            {
+                ShowMain();
+                return;
+            }
+            base.WndProc(ref m);
         }
 
         private string ResolveDataDir()
@@ -118,8 +189,8 @@ namespace ClassBell
         {
             if (startHidden)
             {
-                ShowInTaskbar = true;
-                WindowState = FormWindowState.Minimized;
+                ShowInTaskbar = false;
+                Hide();
             }
             try
             {
@@ -129,6 +200,7 @@ namespace ClassBell
                 bool ready = await WaitForHealthAsync();
                 if (!ready) throw new Exception("本地服务未能在限定时间内启动。");
                 await InitializeWebViewAsync();
+                if (tray != null) tray.Visible = true;
                 await RestoreLoginAsync();
                 await LoadSettingsOnceAsync();
                 StartTimers();
@@ -537,18 +609,16 @@ namespace ClassBell
         private void HideToTray()
         {
             SaveWindowState();
-            // Keep a taskbar button. Hiding the form completely made the app
-            // impossible to recover when Windows 11 chose not to show the
-            // notification icon in the overflow area.
-            ShowInTaskbar = true;
-            WindowState = FormWindowState.Minimized;
+            ShowInTaskbar = false;
+            Hide();
+            if (tray != null) tray.Visible = true;
             if (firstHideBalloon && tray != null)
             {
                 firstHideBalloon = false;
                 tray.BalloonTipTitle = "课铃仍在运行";
-                tray.BalloonTipText = "窗口已收起到托盘，截止提醒仍会弹出。";
+                tray.BalloonTipText = "窗口已隐藏。双击桌面快捷方式，或按 Ctrl+Alt+B 找回。";
                 tray.BalloonTipIcon = ToolTipIcon.Info;
-                tray.ShowBalloonTip(2800);
+                tray.ShowBalloonTip(3000);
             }
         }
 
@@ -617,15 +687,19 @@ namespace ClassBell
             }
             catch
             {
-                try { icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+                try
+                {
+                    icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
+                }
                 catch { icon = SystemIcons.Application; }
             }
+            if (icon == null) icon = SystemIcons.Application;
             tray = new NotifyIcon();
             tray.Icon = icon;
             tray.Text = "课铃 ClassBell";
             tray.Visible = true;
             var menu = new ContextMenuStrip();
-            menu.Items.Add("打开课铃", null, (s, e) => ShowMain());
+            menu.Items.Add("打开课铃（Ctrl+Alt+B）", null, (s, e) => ShowMain());
             pendingItem = new ToolStripMenuItem("待完成 0 项") { Enabled = false };
             menu.Items.Add(pendingItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -695,6 +769,7 @@ namespace ClassBell
                 return;
             }
             exiting = true;
+            try { if (showEvent != null) showEvent.Close(); } catch { }
             StopBackend();
             if (tray != null) { tray.Visible = false; tray.Dispose(); tray = null; }
         }

@@ -118,6 +118,12 @@ function normalizeType(value) {
   return 'work';
 }
 
+function isClosedStatus(value) {
+  const text = String(value || '');
+  return /不可提交|不能提交|已关闭|已结束|已过期|逾期不可|不可补交|不能补交|无法补交/.test(text)
+    && !isCompletedStatus(text);
+}
+
 function isCompletedStatus(value) {
   if (typeof value === 'number') return value > 0;
   const text = String(value || '');
@@ -244,6 +250,7 @@ function parseWorkListHtml(html, base = 'https://mooc1.chaoxing.com') {
       type: 'work',
       dueAt: due ? due.toISOString() : null,
       remoteStatus: isCompletedStatus(statusText) ? 1 : 0,
+      closed: isClosedStatus(statusText),
       sourceUrl: absoluteUrl(base, data),
       statusText,
       detail
@@ -278,6 +285,7 @@ function parseExamListHtml(html, base = 'https://mooc1.chaoxing.com') {
       type: 'exam',
       dueAt: due ? due.toISOString() : null,
       remoteStatus: isCompletedStatus(statusText) ? 1 : 0,
+      closed: isClosedStatus(statusText),
       sourceUrl: absoluteUrl(base, data),
       statusText,
       detail: cells.length > 1 ? cells[1] : ''
@@ -315,6 +323,7 @@ function parsePageRows(rows, now = new Date()) {
       type,
       dueAt: due ? due.toISOString() : null,
       remoteStatus: 0,
+      closed: false,
       sourceUrl,
       statusText: '',
       detail: stripTags(row.text || '').slice(0, 180),

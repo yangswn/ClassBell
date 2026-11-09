@@ -19,7 +19,7 @@ test('writes JSONL, mirrors it and summarizes the last seven days', () => {
   assert.equal(summary.days.length, 7);
   assert.equal(summary.today.events, 3);
   assert.equal(summary.totals.errors, 1);
-  assert.equal(summary.totals.syncs, 0);
+  assert.equal(summary.totals.syncs, 1);
   assert.ok(fs.existsSync(path.join(mirror, 'process_logs')));
   const files = fs.readdirSync(path.join(mirror, 'process_logs')).filter((f) => f.endsWith('.jsonl'));
   assert.equal(files.length, 1);

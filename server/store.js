@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const SCHEMA = 1;
 const MAX_TASKS = 2000;
 const MAX_CANDIDATES = 200;
+const NO_DEADLINE_ISO = '2099-12-31T23:59:00.000Z';
 
 const CATEGORIES = new Set(['homework', 'exam', 'schedule', 'other']);
 const PRIORITIES = new Set(['normal', 'important', 'urgent']);
@@ -49,7 +50,7 @@ function defaultSettings() {
     autoSync: true,
     autoSyncIntervalMin: 30,
     autoAddFromChaoxing: true,
-    reminderOffsets: [60, 10],
+    reminderOffsets: [1440, 60, 10],
     sound: true,
     quietHours: { enabled: false, start: '23:00', end: '07:00' },
     logMirrorDir: '',
@@ -100,15 +101,16 @@ function normalizeTask(input, existing = null) {
   const title = cleanText(input.title ?? base.title, 120);
   if (!title) throw new Error('TASK_TITLE_REQUIRED');
 
-  const due = parseDate(input.dueAt ?? base.dueAt);
-  if (!due) throw new Error('TASK_DUE_INVALID');
+  const noDeadline = Boolean(input.noDeadline ?? base.noDeadline);
+  const due = noDeadline ? new Date(NO_DEADLINE_ISO) : parseDate(input.dueAt ?? base.dueAt);
+  if (!due || Number.isNaN(due.getTime())) throw new Error('TASK_DUE_INVALID');
 
   const category = CATEGORIES.has(input.category) ? input.category : (base.category || 'homework');
   const priority = PRIORITIES.has(input.priority) ? input.priority : (base.priority || 'normal');
   const recurrence = RECURRENCES.has(input.recurrence) ? input.recurrence : (base.recurrence || 'none');
-  const status = input.status === 'done'
-    ? 'done'
-    : (input.status === 'pending' ? 'pending' : (base.status === 'done' ? 'done' : 'pending'));
+  const status = ['done', 'pending', 'missed'].includes(input.status)
+    ? input.status
+    : (['done', 'missed'].includes(base.status) ? base.status : 'pending');
   const source = ['manual', 'chaoxing'].includes(input.source) ? input.source : (base.source || 'manual');
   const offsets = normalizeOffsets(input.reminderOffsets ?? base.reminderOffsets);
 
@@ -119,8 +121,10 @@ function normalizeTask(input, existing = null) {
     category,
     priority,
     dueAt: due.toISOString(),
+    noDeadline,
     notes: cleanText(input.notes ?? base.notes, 2000),
     status,
+    missedAt: status === 'missed' ? (base.missedAt || nowIso()) : null,
     completedAt: status === 'done'
       ? (base.completedAt || nowIso())
       : null,
@@ -404,7 +408,7 @@ class Store {
    * Remote rows without a usable deadline are kept in candidates for review.
    */
   mergeRemote(remoteTasks, { autoAdd = true } = {}) {
-    const stats = { added: 0, updated: 0, completed: 0, candidates: 0, skipped: 0 };
+    const stats = { added: 0, updated: 0, completed: 0, missed: 0, candidates: 0, skipped: 0 };
     const bySource = new Map();
     const byFingerprint = new Map();
     for (const task of this.state.tasks) {
@@ -431,12 +435,17 @@ class Store {
         if (remote.course && remote.course !== existing.course) changed = true;
         if (dueAt && dueAt !== existing.dueAt) {
           patch.dueAt = dueAt;
+          patch.noDeadline = false;
           changed = true;
         }
         if (remote.remoteStatus !== undefined && remote.remoteStatus !== 0 && existing.status === 'pending') {
           patch.status = 'done';
           patch.completedBy = 'chaoxing';
           stats.completed += 1;
+          changed = true;
+        } else if (remote.closed && existing.status === 'pending') {
+          patch.status = 'missed';
+          stats.missed += 1;
           changed = true;
         }
         if (changed) {
@@ -448,6 +457,30 @@ class Store {
 
       if (safeInt(remote.remoteStatus, 0) !== 0) {
         stats.skipped += 1;
+        continue;
+      }
+
+      if (remote.closed) {
+        const created = normalizeTask({
+          title: remote.title,
+          course: remote.course,
+          category: remote.type === 'exam' ? 'exam' : 'homework',
+          priority: remote.type === 'exam' ? 'important' : 'normal',
+          dueAt: dueAt || nowIso(),
+          status: 'missed',
+          notes: remote.notes || '',
+          source: 'chaoxing',
+          sourceKey,
+          sourceUrl: remote.sourceUrl,
+          remoteStatus: 0,
+          lastSeenAt: nowIso(),
+          reminderOffsets: []
+        });
+        this.state.tasks.push(created);
+        this.state.candidates = this.state.candidates.filter((c) => c.sourceKey !== sourceKey);
+        bySource.set(sourceKey, created);
+        this.state.metrics.totalAdded += 1;
+        stats.missed += 1;
         continue;
       }
 
@@ -486,6 +519,32 @@ class Store {
         this.state.candidates = this.state.candidates.filter((c) => c.sourceKey !== sourceKey);
         bySource.set(sourceKey, created);
         byFingerprint.set(fingerprint, created);
+        this.state.metrics.totalAdded += 1;
+        stats.added += 1;
+        continue;
+      }
+
+      // No deadline is a valid state on Chaoxing: the teacher simply did not set
+      // one. Keep it as an open-ended task until the student marks it complete.
+      if (!dueAt && autoAdd) {
+        const created = normalizeTask({
+          title: remote.title,
+          course: remote.course,
+          category: remote.type === 'exam' ? 'exam' : 'homework',
+          priority: remote.type === 'exam' ? 'important' : 'normal',
+          dueAt: NO_DEADLINE_ISO,
+          noDeadline: true,
+          notes: remote.notes || '',
+          source: 'chaoxing',
+          sourceKey,
+          sourceUrl: remote.sourceUrl,
+          remoteStatus: 0,
+          lastSeenAt: nowIso(),
+          reminderOffsets: []
+        });
+        this.state.tasks.push(created);
+        this.state.candidates = this.state.candidates.filter((c) => c.sourceKey !== sourceKey);
+        bySource.set(sourceKey, created);
         this.state.metrics.totalAdded += 1;
         stats.added += 1;
         continue;
@@ -570,7 +629,8 @@ class Store {
         const d = new Date(t.dueAt).getTime();
         return d >= now && d <= weekEnd.getTime();
       }).length,
-      done: this.state.tasks.filter((t) => t.status === 'done').length
+      done: this.state.tasks.filter((t) => t.status === 'done').length,
+      missed: this.state.tasks.filter((t) => t.status === 'missed').length
     };
   }
 }
@@ -581,6 +641,7 @@ module.exports = {
   normalizeTask,
   nextOccurrence,
   normalizeOffsets,
+  NO_DEADLINE_ISO,
   dateOnlyKey,
   cleanText
 };

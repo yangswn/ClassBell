@@ -139,6 +139,12 @@ function groupLabel(date) {
 }
 
 function dueChip(task) {
+  if (task.status === 'missed') {
+    return { text: '已错过', sub: '无法补交', cls: 'missed' };
+  }
+  if (task.noDeadline) {
+    return { text: task.status === 'done' ? '已完成' : '长期任务', sub: task.status === 'done' ? '无截止时间' : '完成前一直保留', cls: 'nodue' };
+  }
   const d = new Date(task.dueAt);
   const now = Date.now();
   if (task.status === 'done') {
@@ -188,7 +194,9 @@ function relativeSince(iso) {
 }
 
 function toLocalInput(date) {
+  if (!date) return '';
   const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
@@ -214,7 +222,7 @@ function pendingTasks() {
 }
 
 function nextPendingTask() {
-  return pendingTasks()[0] || null;
+  return pendingTasks().find((t) => !t.noDeadline) || null;
 }
 
 function summarizeMeta(meta) {
@@ -315,7 +323,8 @@ function updateCountdowns() {
   if (!task) {
     sideTime.textContent = '暂无待办';
     sideTime.classList.remove('overdue');
-    sideTitle.textContent = '新建一项日程，或连接学习通。';
+    const longTerm = pendingTasks().find((t) => t.noDeadline);
+    sideTitle.textContent = longTerm ? '长期任务：' + longTerm.title : '新建一项日程，或连接学习通。';
     return;
   }
   const late = new Date(task.dueAt).getTime() < Date.now();
@@ -328,6 +337,11 @@ function updateHeroCountdownOnly() {
   if (!App.nextTask) return;
   const el = $('#hero-countdown');
   if (!el) return;
+  if (App.nextTask.noDeadline) {
+    el.textContent = '无截止时间';
+    el.classList.remove('overdue');
+    return;
+  }
   const late = new Date(App.nextTask.dueAt).getTime() < Date.now();
   el.textContent = countdownText(App.nextTask.dueAt);
   el.classList.toggle('overdue', late);
@@ -400,14 +414,24 @@ function renderDashboard() {
   else title = '晚上好，把今天收好。';
   $('#dash-title').textContent = title.replace('。', `${name}。`).replace(`${name}${name}`, name);
   const pending = pendingTasks();
+  const nextTimed = pending.find((t) => !t.noDeadline);
   $('#dash-sub').textContent = pending.length
-    ? `还有 ${pending.length} 项待完成，最近一项在 ${dayLabel(pending[0].dueAt)} ${fmtTime(pending[0].dueAt)}。`
+    ? (nextTimed
+      ? `还有 ${pending.length} 项待完成，最近一项在 ${dayLabel(nextTimed.dueAt)} ${fmtTime(nextTimed.dueAt)}。`
+      : `还有 ${pending.length} 项长期任务，完成即可，不设截止时间。`)
     : '目前没有待办。可以新建日程，或连接学习通自动同步。';
 
   $('#stat-pending').textContent = App.stats.pending;
   $('#stat-today').textContent = App.stats.today;
   $('#stat-week').textContent = App.stats.week;
   $('#stat-done').textContent = App.stats.done;
+  const missed = App.state.tasks.filter((t) => t.status === 'missed');
+  const missedBanner = $('#missed-banner');
+  if (missedBanner) {
+    missedBanner.hidden = missed.length === 0;
+    const num = $('#missed-num');
+    if (num) num.textContent = String(missed.length);
+  }
 
   renderHero();
   renderUpcoming();
@@ -420,14 +444,15 @@ function renderHero() {
   const actions = $('#hero-actions');
   const countdown = $('#hero-countdown');
   if (!task) {
-    $('#hero-kicker').textContent = '下一项截止';
-    countdown.textContent = '今天没有截止';
+    const longTermCount = pendingTasks().filter((t) => t.noDeadline).length;
+    $('#hero-kicker').textContent = longTermCount ? '长期任务' : '下一项截止';
+    countdown.textContent = longTermCount ? '无截止时间' : '今天没有截止';
     countdown.classList.add('empty');
     countdown.classList.remove('overdue');
-    $('#hero-title').textContent = '把空出来的时间，留给重要的事。';
-    $('#hero-meta').textContent = '新建一项日程，或连接学习通自动识别作业与考试。';
+    $('#hero-title').textContent = longTermCount ? `还有 ${longTermCount} 项长期任务` : '把空出来的时间，留给重要的事。';
+    $('#hero-meta').textContent = longTermCount ? '这些作业没有截止时间，完成一项就勾掉一项。' : '新建一项日程，或连接学习通自动识别作业与考试。';
     $('#hero-date').textContent = `${fmtMonthDay(new Date())} · ${WEEKDAYS[new Date().getDay()]}`;
-    actions.innerHTML = `<button class="btn btn-gold btn-small" data-act="add">新建日程</button><button class="btn btn-light btn-small" data-goto="integration">连接学习通</button>`;
+    actions.innerHTML = `<button class="btn btn-gold btn-small" data-act="add">新建日程</button><button class="btn btn-light btn-small" data-goto="tasks">查看长期任务</button>`;
     return;
   }
   const late = new Date(task.dueAt).getTime() < Date.now();
@@ -458,12 +483,12 @@ function renderUpcoming() {
     return;
   }
   container.innerHTML = tasks.map((task) => {
-    const d = new Date(task.dueAt);
-    const late = d.getTime() < Date.now();
+    const d = task.noDeadline ? null : new Date(task.dueAt);
+    const late = d ? d.getTime() < Date.now() : false;
     const chip = dueChip(task);
     return `
       <div class="upcoming-item" data-act="edit" data-id="${esc(task.id)}">
-        <div class="upcoming-date"><strong>${pad2(d.getDate())}</strong><span>${MONTHS[d.getMonth()]}</span></div>
+        <div class="upcoming-date"><strong>${d ? pad2(d.getDate()) : '∞'}</strong><span>${d ? MONTHS[d.getMonth()] : '长期'}</span></div>
         <div class="upcoming-main">
           <div class="upcoming-title">${esc(task.title)}</div>
           <div class="upcoming-meta">
@@ -486,7 +511,7 @@ function renderWeekChart() {
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
-    const count = App.state.tasks.filter((t) => t.status === 'pending' && dateKey(t.dueAt) === dateKey(d)).length;
+    const count = App.state.tasks.filter((t) => t.status === 'pending' && !t.noDeadline && dateKey(t.dueAt) === dateKey(d)).length;
     days.push({ d, count });
   }
   const max = Math.max(1, ...days.map((d) => d.count));
@@ -521,6 +546,9 @@ function renderTasks() {
   const pending = all.filter((t) => t.status === 'pending');
   $('#count-pending').textContent = String(pending.length);
   $('#count-done').textContent = String(all.filter((t) => t.status === 'done').length);
+  const missedCount = all.filter((t) => t.status === 'missed').length;
+  const missedCountEl = $('#count-missed');
+  if (missedCountEl) missedCountEl.textContent = String(missedCount);
 
   $$('#status-tabs .seg').forEach((btn) => btn.classList.toggle('active', btn.dataset.status === App.filters.status));
 
@@ -531,8 +559,8 @@ function renderTasks() {
   if (q) tasks = tasks.filter((t) => `${t.title} ${t.course}`.toLowerCase().includes(q));
 
   const now = Date.now();
-  const overdueCount = pending.filter((t) => new Date(t.dueAt).getTime() < now).length;
-  $('#task-summary').innerHTML = `共 <strong>${tasks.length}</strong> 项 · 待完成 <strong>${pending.length}</strong> 项${overdueCount ? ` · <span style="color:var(--coral)">已逾期 ${overdueCount} 项</span>` : ''}`;
+  const overdueCount = pending.filter((t) => !t.noDeadline && new Date(t.dueAt).getTime() < now).length;
+  $('#task-summary').innerHTML = `共 <strong>${tasks.length}</strong> 项 · 待完成 <strong>${pending.length}</strong> 项${missedCount ? ` · <span style="color:var(--coral)">已错过 ${missedCount} 项</span>` : ''}${overdueCount ? ` · <span style="color:var(--coral)">已逾期 ${overdueCount} 项</span>` : ''}`;
 
   if (!tasks.length) {
     list.innerHTML = `
@@ -551,6 +579,8 @@ function renderTasks() {
   for (const task of taskListSorted(tasks)) {
     let key;
     if (task.status === 'done') key = 'done';
+    else if (task.status === 'missed') key = 'missed';
+    else if (task.noDeadline) key = 'nodeadline';
     else if (new Date(task.dueAt).getTime() < now) key = 'overdue';
     else key = dateKey(task.dueAt);
     if (!groups.has(key)) groups.set(key, []);
@@ -558,18 +588,24 @@ function renderTasks() {
   }
 
   const order = [...groups.keys()].sort((a, b) => {
+    if (a === 'missed') return -1;
+    if (b === 'missed') return 1;
     if (a === 'overdue') return -1;
     if (b === 'overdue') return 1;
     if (a === 'done') return 1;
     if (b === 'done') return -1;
+    if (a === 'nodeadline') return 1;
+    if (b === 'nodeadline') return -1;
     return a.localeCompare(b);
   });
 
   list.innerHTML = order.map((key) => {
     const rows = groups.get(key);
     let head;
-    if (key === 'overdue') head = '已逾期';
+    if (key === 'missed') head = '已错过 · 无法补交';
+    else if (key === 'overdue') head = '已逾期';
     else if (key === 'done') head = '已完成';
+    else if (key === 'nodeadline') head = '长期任务 · 无截止时间';
     else head = groupLabel(new Date(`${key}T12:00:00`));
     return `
       <div class="task-group">
@@ -584,9 +620,10 @@ function renderTasks() {
 function taskRowHTML(task) {
   const due = dueChip(task);
   const isDone = task.status === 'done';
+  const isMissed = task.status === 'missed';
   return `
-    <div class="task-row ${isDone ? 'done' : ''}" data-id="${esc(task.id)}">
-      <button class="task-check" data-act="toggle" data-id="${esc(task.id)}" title="${isDone ? '恢复为待完成' : '标记完成'}" aria-label="${isDone ? '恢复为待完成' : '标记完成'}"><svg><use href="#i-check"/></svg></button>
+    <div class="task-row ${isDone ? 'done' : ''} ${isMissed ? 'missed' : ''}" data-id="${esc(task.id)}">
+      <button class="task-check" data-act="toggle" data-id="${esc(task.id)}" ${isMissed ? 'disabled' : ''} title="${isMissed ? '已错过，无法补交' : (isDone ? '恢复为待完成' : '标记完成')}" aria-label="${isMissed ? '已错过' : (isDone ? '恢复为待完成' : '标记完成')}"><svg><use href="#i-check"/></svg></button>
       <div class="task-main" data-act="edit" data-id="${esc(task.id)}">
         <div class="task-title-line">
           <span class="priority-mark ${esc(task.priority)}"></span>
@@ -883,6 +920,9 @@ async function syncNow({ silent = false } = {}) {
       const payload = await api.getState();
       applyPayload(payload);
       if (!silent) toast(result.message || '同步完成', 'success', 3600);
+      if (result.merge && result.merge.missed) {
+        toast(`有 ${result.merge.missed} 项作业已经错过，无法补交。下次截止前 24 小时先交。`, 'error', 6200);
+      }
       App.loginSyncTriggered = true;
       await loadLogs();
     } else {
@@ -929,6 +969,8 @@ function openTaskModal(task = null, candidate = null) {
   $('#task-form-error').hidden = true;
   $('#task-delete').hidden = true;
   $('#task-id').value = '';
+  $('#task-no-deadline').checked = false;
+  $('#task-due').disabled = false;
   $('#task-source-key').value = '';
   $('#task-source-url').value = '';
   App.editingId = null;
@@ -940,7 +982,9 @@ function openTaskModal(task = null, candidate = null) {
     $('#task-id').value = task.id;
     $('#task-title').value = task.title;
     $('#task-course').value = task.course || '';
-    $('#task-due').value = toLocalInput(task.dueAt);
+    $('#task-no-deadline').checked = Boolean(task.noDeadline);
+    $('#task-due').value = task.noDeadline ? '' : toLocalInput(task.dueAt);
+    $('#task-due').disabled = Boolean(task.noDeadline);
     setRadio('task-category', task.category);
     setRadio('task-priority', task.priority);
     $('#task-recurrence').value = task.recurrence || 'none';
@@ -958,7 +1002,10 @@ function openTaskModal(task = null, candidate = null) {
     defaultDue.setMinutes(0);
     defaultDue.setHours(defaultDue.getHours() + 1);
     if (defaultDue.getHours() < 8) defaultDue.setHours(9);
-    $('#task-due').value = candidate ? '' : toLocalInput(defaultDue);
+    const candidateNoDue = Boolean(candidate && !candidate.dueAt);
+    $('#task-no-deadline').checked = candidateNoDue;
+    $('#task-due').disabled = candidateNoDue;
+    $('#task-due').value = candidateNoDue ? '' : (candidate ? '' : toLocalInput(defaultDue));
     setRadio('task-category', candidate && candidate.type === 'exam' ? 'exam' : 'homework');
     setRadio('task-priority', 'normal');
     setOffsets('#task-offset-chips', App.state.settings.reminderOffsets || [60, 10]);
@@ -1017,14 +1064,16 @@ async function saveTask(event) {
   event.preventDefault();
   const title = $('#task-title').value.trim();
   const dueValue = $('#task-due').value;
-  const dueAt = fromLocalInput(dueValue);
+  const noDeadline = $('#task-no-deadline').checked;
+  const dueAt = noDeadline ? null : fromLocalInput(dueValue);
   if (!title) { showFormError('请填写任务标题。'); $('#task-title').focus(); return; }
-  if (!dueAt) { showFormError('请选择截止时间。'); $('#task-due').focus(); return; }
+  if (!noDeadline && !dueAt) { showFormError('请选择截止时间，或勾选“无截止时间”。'); $('#task-due').focus(); return; }
   const offsets = getOffsets('#task-offset-chips');
   const payload = {
     title,
     course: $('#task-course').value.trim(),
     dueAt,
+    noDeadline,
     category: getRadio('task-category') || 'homework',
     priority: getRadio('task-priority') || 'normal',
     recurrence: $('#task-recurrence').value || 'none',
@@ -1201,6 +1250,11 @@ function bindEvents() {
   $('#set-auto-add-inline').addEventListener('change', (e) => updateSetting({ autoAddFromChaoxing: e.target.checked }));
 
   $('#task-form').addEventListener('submit', saveTask);
+  $('#task-no-deadline').addEventListener('change', (event) => {
+    const noDue = event.target.checked;
+    $('#task-due').disabled = noDue;
+    if (noDue) $('#task-due').value = '';
+  });
   $('#task-modal-close').addEventListener('click', closeTaskModal);
   $('#task-cancel').addEventListener('click', closeTaskModal);
   $('#task-modal').addEventListener('click', (event) => { if (event.target === $('#task-modal')) closeTaskModal(); });

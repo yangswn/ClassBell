@@ -96,6 +96,15 @@
             </div>
           </div>
 
+          <div class="missed-banner" id="missed-banner" hidden>
+            <div class="missed-mark"><svg><use href="#i-bell"/></svg></div>
+            <div class="missed-copy">
+              <strong>有 <span id="missed-num">0</span> 项已经错过，无法补交</strong>
+              <p>下次截止前 24 小时先交，不要让“已过期”变成习惯。</p>
+            </div>
+            <button class="link-btn" data-goto="tasks">查看记录 <svg><use href="#i-arrow"/></svg></button>
+          </div>
+
           <div class="welcome-card" id="welcome-card" hidden>
             <div class="welcome-mark"><svg><use href="#i-spark"/></svg></div>
             <div class="welcome-copy">
@@ -179,6 +188,7 @@
           <div class="task-toolbar">
             <div class="segmented" id="status-tabs">
               <button class="seg active" data-status="pending">待完成 <span id="count-pending">0</span></button>
+              <button class="seg" data-status="missed">已错过 <span id="count-missed">0</span></button>
               <button class="seg" data-status="done">已完成 <span id="count-done">0</span></button>
               <button class="seg" data-status="all">全部</button>
             </div>
@@ -428,7 +438,7 @@
         <div class="form-grid">
           <label class="field span-2"><span>标题 <i>*</i></span><input id="task-title" maxlength="120" placeholder="例如：软件工程课程设计报告" autocomplete="off" /></label>
           <label class="field"><span>课程</span><input id="task-course" maxlength="60" placeholder="例如：软件工程" autocomplete="off" /></label>
-          <label class="field"><span>截止时间 <i>*</i></span><input id="task-due" type="datetime-local" /></label>
+          <div class="field"><span>截止时间</span><input id="task-due" type="datetime-local" /><label class="inline-check"><input type="checkbox" id="task-no-deadline" /><span>无截止时间（长期任务）</span></label></div>
           <div class="field"><span>类型</span><div class="radio-row" id="task-category-row">
             <label class="radio-chip"><input type="radio" name="task-category" value="homework" checked /><span>作业</span></label>
             <label class="radio-chip"><input type="radio" name="task-category" value="exam" /><span>考试</span></label>

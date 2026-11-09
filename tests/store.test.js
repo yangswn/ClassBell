@@ -63,16 +63,51 @@ test('mergeRemote deduplicates by source key and adds due tasks', () => {
   assert.equal(store.stats().pending, 1);
 });
 
-test('mergeRemote keeps tasks without deadlines as candidates', () => {
+test('mergeRemote keeps tasks without deadlines as open-ended tasks', () => {
   const { store } = tempStore();
   const result = store.mergeRemote([{
     title: '章节测验', course: '线性代数', type: 'work',
     dueAt: null, sourceKey: 'cx:work:no-due'
   }], { autoAdd: true });
-  assert.equal(result.added, 0);
-  assert.equal(result.candidates, 1);
-  assert.equal(store.snapshot().candidates[0].reason, 'no_deadline');
+  assert.equal(result.added, 1);
+  assert.equal(result.candidates, 0);
+  const task = store.snapshot().tasks[0];
+  assert.equal(task.noDeadline, true);
+  assert.equal(task.dueAt, '2099-12-31T23:59:00.000Z');
+  assert.equal(task.status, 'pending');
+  assert.equal(store.stats().pending, 1);
 });
+
+test('mergeRemote does not add a completed task without a deadline', () => {
+  const { store } = tempStore();
+  const result = store.mergeRemote([{
+    title: '已完成的章节测验', course: '线性代数', type: 'work',
+    dueAt: null, sourceKey: 'cx:work:no-due-done', remoteStatus: 1
+  }], { autoAdd: true });
+  assert.equal(result.added, 0);
+  assert.equal(result.skipped, 1);
+  assert.equal(store.snapshot().tasks.length, 0);
+});
+
+test('completed remote task is not added; closed unfinished work becomes a warning record', () => {
+  const { store } = tempStore();
+  const done = store.mergeRemote([{
+    title: '已完成作业', course: '大学英语', type: 'work',
+    dueAt: due(2), sourceKey: 'cx:work:done-only', remoteStatus: 1
+  }], { autoAdd: true });
+  assert.equal(done.added, 0);
+  assert.equal(store.stats().done, 0);
+
+  const closed = store.mergeRemote([{
+    title: '已过期作业', course: '大学英语', type: 'work',
+    dueAt: due(-2), sourceKey: 'cx:work:closed', remoteStatus: 0, closed: true
+  }], { autoAdd: true });
+  assert.equal(closed.missed, 1);
+  assert.equal(store.stats().missed, 1);
+  assert.equal(store.stats().pending, 0);
+  assert.equal(store.snapshot().tasks[0].status, 'missed');
+});
+
 
 test('remote completion is reflected locally', () => {
   const { store } = tempStore();

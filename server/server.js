@@ -157,6 +157,7 @@ function syncMetaFor(auth, result, merge, error) {
     recognized: result && Array.isArray(result.tasks) ? result.tasks.length : 0,
     added: merge ? merge.added : 0,
     updated: merge ? merge.updated : 0,
+    missed: merge ? (merge.missed || 0) : 0,
     error: error ? friendlyError(error) : '',
     accountLabel: auth && auth.loggedIn ? '学习通账号' : ''
   };
@@ -184,11 +185,12 @@ function runSync({ auto = false } = {}) {
         durationMs: Date.now() - started,
         meta: {
           added: merge.added, updated: merge.updated, completed: merge.completed,
+          missed: merge.missed || 0,
           candidates: merge.candidates, source: result.source
         }
       });
       broadcastState();
-      return { ok: true, result, merge, message: `识别 ${result.tasks.length} 项，新增 ${merge.added} 项` };
+      return { ok: true, result, merge, message: `识别 ${result.tasks.length} 项，新增 ${merge.added} 项${merge.missed ? `，错过 ${merge.missed} 项` : ''}` };
     } catch (error) {
       const auth = result ? result.auth : null;
       store.setSyncMeta(syncMetaFor(auth, null, null, error));

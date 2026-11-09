@@ -78,6 +78,7 @@
           <div class="side-next-title" id="side-next-title">暂无待办</div>
         </div>
         <div class="sidebar-foot">
+          <button class="side-quit" id="btn-quit-side" title="终止课铃并关闭后台服务"><svg><use href="#i-power"/></svg><span>终止课铃</span></button>
           <div class="foot-line"><span>数据仅保存在本机</span><svg><use href="#i-shield"/></svg></div>
           <div class="foot-version" id="foot-version">v1.0.1</div>
         </div>
@@ -425,13 +426,11 @@
 
           <div class="panel settings-panel settings-wide">
             <div class="settings-title"><div><h2>界面与退出</h2><p>调大一点看得清，或者彻底停掉课铃</p></div><svg><use href="#i-sliders"/></svg></div>
-            <div class="field-block inline-field">
+            <div class="field-block">
               <label class="field-label">界面大小</label>
-              <div class="segmented compact" id="ui-scale">
-                <button class="seg" data-scale="0.9">小</button>
-                <button class="seg active" data-scale="1">标准</button>
-                <button class="seg" data-scale="1.08">大</button>
-              </div>
+              <div class="segmented compact scale-row" id="ui-scale"></div>
+              <p class="field-note" id="ui-scale-hint">当前 标准 · 100%</p>
+              <p class="field-note">也可以用 <kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>-</kbd> 调整，<kbd>Ctrl</kbd> + <kbd>0</kbd> 回到标准。</p>
             </div>
             <div class="danger-row">
               <div><strong>终止运行</strong><p>立即关闭课铃和后台服务，之后不会再提醒，直到重新打开。</p></div>

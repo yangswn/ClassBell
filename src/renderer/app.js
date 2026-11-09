@@ -33,6 +33,15 @@ const App = {
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 const MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
 const CATEGORY_LABEL = { homework: '作业', exam: '考试', schedule: '日程', other: '其他' };
+const UI_SCALES = [
+  { value: 0.9, label: '小', note: '90%' },
+  { value: 1, label: '标准', note: '100%' },
+  { value: 1.1, label: '大', note: '110%' },
+  { value: 1.25, label: '特大', note: '125%' },
+  { value: 1.4, label: '超大', note: '140%' },
+  { value: 1.6, label: '巨大', note: '160%' }
+];
+const DEFAULT_UI_SCALE = 1.1;
 const PRIORITY_LABEL = { normal: '普通', important: '重要', urgent: '紧急' };
 const EVENT_LABEL = {
   app_start: '应用启动',
@@ -1105,6 +1114,17 @@ async function saveTask(event) {
   }
 }
 
+async function quitApp() {
+  const ok = await confirmAction({
+    title: '终止课铃？',
+    text: '课铃和本地服务会立即关闭，之后不会再提醒，直到你重新打开。',
+    okText: '终止运行',
+    icon: 'i-power'
+  });
+  if (!ok) return;
+  try { await api.quit(); } catch (_) { /* host exits */ }
+}
+
 function confirmAction({ title, text, okText = '确认', danger = true, icon = 'i-trash' }) {
   return new Promise((resolve) => {
     $('#confirm-title').textContent = title;
@@ -1140,18 +1160,60 @@ function mountLogsInSettings() {
   settingsPage.appendChild(logsPage);
 }
 
+function buildUiScaleOptions() {
+  const box = $('#ui-scale');
+  if (!box) return;
+  if (!box.dataset.built) {
+    box.innerHTML = UI_SCALES
+      .map((item) => `<button class="seg" data-scale="${item.value}" title="${item.note}">${item.label}</button>`)
+      .join('');
+    box.dataset.built = '1';
+  }
+}
+
+function currentUiScale() {
+  const raw = Number(localStorage.getItem('campus:uiScale') || DEFAULT_UI_SCALE);
+  return UI_SCALES.some((item) => item.value === raw) ? raw : DEFAULT_UI_SCALE;
+}
+
+function migrateUiScale() {
+  // The first builds shipped a 100% default that read too small on high-DPI
+  // screens; nudge existing profiles up once, without overriding a later choice.
+  try {
+    if (localStorage.getItem('campus:uiScaleV2')) return;
+    const raw = localStorage.getItem('campus:uiScale');
+    if (!raw || Number(raw) === 1) localStorage.setItem('campus:uiScale', String(DEFAULT_UI_SCALE));
+    localStorage.setItem('campus:uiScaleV2', '1');
+  } catch (_) { /* ignore */ }
+}
+
 function applySavedUiScale() {
-  let scale = Number(localStorage.getItem('campus:uiScale') || '1');
-  if (![0.9, 1, 1.08].includes(scale)) scale = 1;
+  migrateUiScale();
+  buildUiScaleOptions();
+  applyUiScale(currentUiScale());
+}
+
+function applyUiScale(scale) {
   document.documentElement.style.zoom = String(scale);
   $$('#ui-scale .seg').forEach((btn) => btn.classList.toggle('active', Number(btn.dataset.scale) === scale));
+  const note = UI_SCALES.find((item) => item.value === scale);
+  const hint = $('#ui-scale-hint');
+  if (hint && note) hint.textContent = `当前 ${note.label} · ${note.note}`;
 }
 
 function setUiScale(scale) {
-  const value = [0.9, 1, 1.08].includes(Number(scale)) ? Number(scale) : 1;
-  document.documentElement.style.zoom = String(value);
+  const value = UI_SCALES.some((item) => item.value === Number(scale)) ? Number(scale) : DEFAULT_UI_SCALE;
+  applyUiScale(value);
   try { localStorage.setItem('campus:uiScale', String(value)); } catch (_) { /* ignore */ }
-  $$('#ui-scale .seg').forEach((btn) => btn.classList.toggle('active', Number(btn.dataset.scale) === value));
+}
+
+function stepUiScale(direction) {
+  const list = UI_SCALES.map((item) => item.value);
+  let index = list.indexOf(currentUiScale());
+  if (index < 0) index = 1;
+  index = Math.min(list.length - 1, Math.max(0, index + direction));
+  setUiScale(list[index]);
+  toast(`界面大小：${UI_SCALES[index].label}（${UI_SCALES[index].note}）`, 'info', 1600);
 }
 
 function setPage(page) {
@@ -1180,15 +1242,16 @@ function bindEvents() {
   $('#btn-min').addEventListener('click', () => api.windowAction('minimize'));
   $('#btn-max').addEventListener('click', () => api.windowAction('maximize'));
   $('#btn-close').addEventListener('click', () => api.windowAction('close'));
-  $$('#ui-scale .seg').forEach((btn) => btn.addEventListener('click', () => setUiScale(btn.dataset.scale)));
+  $('#ui-scale').addEventListener('click', (event) => {
+    const btn = event.target.closest('.seg');
+    if (btn) setUiScale(btn.dataset.scale);
+  });
   $('#btn-scroll-logs').addEventListener('click', () => {
     const logs = $('#page-logs');
     if (logs) logs.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
-  $('#btn-quit-app').addEventListener('click', async () => {
-    if (!window.confirm('确定终止课铃？终止后提醒会停止，直到下次打开。')) return;
-    try { await api.quit(); } catch (_) { /* host exits */ }
-  });
+  $('#btn-quit-app').addEventListener('click', quitApp);
+  $('#btn-quit-side').addEventListener('click', quitApp);
   $('#titlebar').addEventListener('dblclick', (event) => {
     if (event.target.closest('button')) return;
     api.windowAction('maximize');
@@ -1402,6 +1465,10 @@ function bindEvents() {
       event.preventDefault();
       $('#task-form').requestSubmit();
     }
+    if (event.ctrlKey || event.metaKey) {
+      if (event.key === '=' || event.key === '+') { event.preventDefault(); stepUiScale(1); }
+      else if (event.key === '-' || event.key === '_') { event.preventDefault(); stepUiScale(-1); }
+      else if (event.key === '0') { event.preventDefault(); setUiScale(1); }    }
   });
 
   api.onState((payload) => {

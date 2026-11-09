@@ -376,6 +376,175 @@ async function handleApi(req, res) {
     return json(res, 200, { ok: true });
   }
 
+  /* ------------------------------------------------------------ notices */
+
+  if (p === '/api/notices' && method === 'POST') {
+    const body = await readJson(req);
+    const result = store.addNotice({ ...body, source: body.source || 'manual' });
+    log('notice_added', { meta: { kind: result.notice.kind, created: result.created } });
+    broadcastState();
+    return json(res, 200, result.notice);
+  }
+  if (p === '/api/notices/read-all' && method === 'POST') {
+    const result = store.markAllNoticesRead();
+    log('notices_read_all', { meta: { updated: result.updated } });
+    broadcastState();
+    return json(res, 200, result);
+  }
+  if (p === '/api/notices/extract' && method === 'POST') {
+    const started = Date.now();
+    let added = 0;
+    let source = 'local';
+    try {
+      const result = await chaoxing.fetchNotices();
+      if (result.ok) {
+        const stats = store.addNotices(result.notices);
+        added += stats.added;
+        source = 'chaoxing';
+      }
+    } catch (error) {
+      log('notice_extract_error', { ok: false, error, durationMs: Date.now() - started });
+    }
+    // Local signals are always available: new assignments, missed deadlines and
+    // gear that is still out past its due date.
+    const now = Date.now();
+    const localNotices = [];
+    for (const task of store.state.tasks) {
+      if (task.status === 'missed') {
+        localNotices.push({
+          title: `已错过：${task.title}`,
+          body: `${task.course || '未填课程'} · 该作业已无法补交`,
+          kind: 'assignment',
+          course: task.course,
+          source: 'local',
+          sourceKey: `local:missed:${task.id}`,
+          publishedAt: task.missedAt || task.updatedAt
+        });
+      } else if (task.status === 'pending' && task.dueAt && new Date(task.dueAt).getTime() < now) {
+        localNotices.push({
+          title: `已逾期：${task.title}`,
+          body: `${task.course || '未填课程'} · 请尽快处理`,
+          kind: 'assignment',
+          course: task.course,
+          source: 'local',
+          sourceKey: `local:overdue:${task.id}`,
+          publishedAt: task.dueAt
+        });
+      }
+    }
+    for (const item of store.state.gear) {
+      if (item.status === 'out' && item.dueAt && new Date(item.dueAt).getTime() < now) {
+        localNotices.push({
+          title: `器材未还：${item.name}`,
+          body: `${item.borrower || '借用人未填'} · 应还 ${new Date(item.dueAt).toLocaleString('zh-CN')}`,
+          kind: 'gear',
+          source: 'local',
+          sourceKey: `local:gear:${item.id}:${item.dueAt}`,
+          publishedAt: item.dueAt
+        });
+      }
+    }
+    const localStats = store.addNotices(localNotices);
+    added += localStats.added;
+    log('notices_extracted', {
+      durationMs: Date.now() - started,
+      meta: { added, source, local: localNotices.length }
+    });
+    broadcastState();
+    return json(res, 200, { ok: true, added, source, local: localNotices.length });
+  }
+  const noticeMatch = /^\/api\/notices\/([^/]+)$/.exec(p);
+  if (noticeMatch) {
+    const id = decodeURIComponent(noticeMatch[1]);
+    if (method === 'PATCH' || method === 'PUT') {
+      const body = await readJson(req);
+      const notice = store.markNotice(id, body.read !== false);
+      broadcastState();
+      return json(res, 200, notice);
+    }
+    if (method === 'DELETE') {
+      store.deleteNotice(id);
+      broadcastState();
+      return json(res, 200, { ok: true });
+    }
+  }
+
+  /* --------------------------------------------------------------- gear */
+
+  if (p === '/api/gear' && method === 'POST') {
+    const body = await readJson(req);
+    const item = store.addGear(body);
+    log('gear_added', { meta: { has_due: Boolean(item.dueAt) } });
+    broadcastState();
+    return json(res, 200, item);
+  }
+  const gearMatch = /^\/api\/gear\/([^/]+)(?:\/(return))?$/.exec(p);
+  if (gearMatch) {
+    const id = decodeURIComponent(gearMatch[1]);
+    if (method === 'POST' && gearMatch[2] === 'return') {
+      const body = await readJson(req).catch(() => ({}));
+      const item = store.returnGear(id, body || {});
+      log('gear_returned', { meta: { condition: item.condition || '' } });
+      broadcastState();
+      return json(res, 200, item);
+    }
+    if (method === 'PATCH' || method === 'PUT') {
+      const item = store.updateGear(id, await readJson(req));
+      broadcastState();
+      return json(res, 200, item);
+    }
+    if (method === 'DELETE') {
+      store.deleteGear(id);
+      broadcastState();
+      return json(res, 200, { ok: true });
+    }
+  }
+
+  /* ----------------------------------------------------------- mistakes */
+
+  if (p === '/api/mistakes' && method === 'POST') {
+    const body = await readJson(req);
+    const result = store.addMistake({ ...body, source: body.source === 'chaoxing' ? 'chaoxing' : 'manual' });
+    log('mistake_added', { meta: { course: result.mistake.course, created: result.created } });
+    broadcastState();
+    return json(res, 200, result.mistake);
+  }
+  if (p === '/api/mistakes/extract' && method === 'POST') {
+    const started = Date.now();
+    try {
+      const result = await chaoxing.collectMistakes(store.state.tasks, { limit: 12 });
+      const stats = store.addMistakes(result.mistakes || []);
+      log('mistakes_extracted', {
+        durationMs: Date.now() - started,
+        meta: { checked: result.checked, found: result.found, added: stats.added }
+      });
+      broadcastState();
+      return json(res, 200, {
+        ok: true, checked: result.checked, found: result.found, added: stats.added,
+        message: result.found
+          ? `检查 ${result.checked} 份作业，归档 ${stats.added} 道错题。`
+          : `检查 ${result.checked} 份作业，没有识别到可归档的错题；可在页面里手动添加。`
+      });
+    } catch (error) {
+      log('mistakes_extract_error', { ok: false, error, durationMs: Date.now() - started });
+      return json(res, 200, { ok: false, code: cleanError(error).code, message: '读取作业详情失败，请稍后重试或手动添加。' });
+    }
+  }
+  const mistakeMatch = /^\/api\/mistakes\/([^/]+)$/.exec(p);
+  if (mistakeMatch) {
+    const id = decodeURIComponent(mistakeMatch[1]);
+    if (method === 'PATCH' || method === 'PUT') {
+      const item = store.updateMistake(id, await readJson(req));
+      broadcastState();
+      return json(res, 200, item);
+    }
+    if (method === 'DELETE') {
+      store.deleteMistake(id);
+      broadcastState();
+      return json(res, 200, { ok: true });
+    }
+  }
+
   if (p === '/api/reminders/pending' && method === 'GET') {
     scheduler.check();
     processSnoozes();

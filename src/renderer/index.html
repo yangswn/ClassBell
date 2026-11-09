@@ -14,6 +14,8 @@
     <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-13.7-5.3L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 13.7 5.3L20 16"/><path d="M20 20v-4h-4"/></symbol>
     <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.2-5 4.1 10 2.2-5H21"/></symbol>
     <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M3.5 8 12 4l8.5 4v8L12 20l-8.5-4z"/><path d="M3.5 8 12 12l8.5-4M12 12v8"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h7M15 7h5M4 17h3M11 17h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
@@ -68,6 +70,9 @@
           <button class="nav-item active" data-page="dashboard"><svg><use href="#i-grid"/></svg><span>今日概览</span><em class="nav-badge" id="nav-badge"></em></button>
           <button class="nav-item" data-page="tasks"><svg><use href="#i-list"/></svg><span>任务日程</span></button>
           <button class="nav-item" data-page="integration"><svg><use href="#i-sync"/></svg><span>学习通同步</span><i class="nav-dot" id="nav-cx-dot" hidden></i></button>
+          <button class="nav-item" data-page="notices"><svg><use href="#i-bell"/></svg><span>通知中心</span><em class="nav-badge" id="nav-notice-badge"></em></button>
+          <button class="nav-item" data-page="gear"><svg><use href="#i-box"/></svg><span>器材借还</span><em class="nav-badge" id="nav-gear-badge"></em></button>
+          <button class="nav-item" data-page="mistakes"><svg><use href="#i-book"/></svg><span>错题本</span><em class="nav-badge" id="nav-mistake-badge"></em></button>
           <button class="nav-item" data-page="settings"><svg><use href="#i-sliders"/></svg><span>偏好设置</span></button>
         </nav>
 
@@ -80,7 +85,7 @@
         <div class="sidebar-foot">
           <button class="side-quit" id="btn-quit-side" title="终止课铃并关闭后台服务"><svg><use href="#i-power"/></svg><span>终止课铃</span></button>
           <div class="foot-line"><span>数据仅保存在本机</span><svg><use href="#i-shield"/></svg></div>
-          <div class="foot-version" id="foot-version">v1.0.2</div>
+          <div class="foot-version" id="foot-version">v1.0.3</div>
         </div>
       </aside>
 
@@ -293,6 +298,93 @@
           </div>
         </section>
 
+        <section class="page" id="page-notices" aria-labelledby="notices-title">
+          <div class="page-head">
+            <div>
+              <div class="eyebrow">通知提取</div>
+              <h1 id="notices-title">该看的东西，自动收进来。</h1>
+              <p class="page-sub">从学习通通知与本地关键事件提取：错过、逾期、器材未还都会出现在这里。</p>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-ghost" id="btn-extract-notices"><svg><use href="#i-sync"/></svg><span>从学习通提取</span></button>
+              <button class="btn btn-primary" id="btn-add-notice"><svg><use href="#i-plus"/></svg><span>手动添加</span></button>
+            </div>
+          </div>
+
+          <div class="stats-row mini-stats">
+            <div class="stat-card"><span class="stat-label">未读</span><strong id="notice-unread">0</strong><em>条</em></div>
+            <div class="stat-card"><span class="stat-label">通知总数</span><strong id="notice-total">0</strong><em>条</em></div>
+            <div class="stat-card"><span class="stat-label">最近提取</span><strong id="notice-last">—</strong><em id="notice-last-unit"></em></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div><h2>通知列表</h2><p>点标题展开正文；未读左侧有标记</p></div>
+              <div class="log-head-actions">
+                <button class="link-btn" id="btn-read-all">全部已读</button>
+              </div>
+            </div>
+            <div class="notice-list" id="notice-list"></div>
+          </div>
+        </section>
+
+        <section class="page" id="page-gear" aria-labelledby="gear-title">
+          <div class="page-head">
+            <div>
+              <div class="eyebrow">器材借还核对</div>
+              <h1 id="gear-title">借了什么，还没还什么。</h1>
+              <p class="page-sub">实验室器材、绘图板、仪器都能记；到期未还会自动进入通知中心。</p>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-primary" id="btn-add-gear"><svg><use href="#i-plus"/></svg><span>登记借出</span></button>
+            </div>
+          </div>
+
+          <div class="stats-row mini-stats">
+            <div class="stat-card"><span class="stat-label">借出中</span><strong id="gear-out">0</strong><em>件</em></div>
+            <div class="stat-card"><span class="stat-label">逾期未还</span><strong id="gear-overdue">0</strong><em>件</em></div>
+            <div class="stat-card"><span class="stat-label">已归还</span><strong id="gear-returned">0</strong><em>件</em></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div><h2>借还清单</h2><p>按“未还优先、应还时间最近”排序</p></div>
+              <div class="log-head-actions"><button class="link-btn" id="btn-gear-check">核对未还</button></div>
+            </div>
+            <div class="gear-list" id="gear-list"></div>
+          </div>
+        </section>
+
+        <section class="page" id="page-mistakes" aria-labelledby="mistakes-title">
+          <div class="page-head">
+            <div>
+              <div class="eyebrow">错题归档</div>
+              <h1 id="mistakes-title">错一次，记一辈子。</h1>
+              <p class="page-sub">按学习通课程归档；可读取已批阅作业里的错题，也可以自己补录。</p>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-ghost" id="btn-extract-mistakes"><svg><use href="#i-sync"/></svg><span>从学习通归档</span></button>
+              <button class="btn btn-primary" id="btn-add-mistake"><svg><use href="#i-plus"/></svg><span>手动添加</span></button>
+            </div>
+          </div>
+
+          <div class="stats-row mini-stats">
+            <div class="stat-card"><span class="stat-label">累计错题</span><strong id="mistake-total">0</strong><em>道</em></div>
+            <div class="stat-card"><span class="stat-label">近 7 天</span><strong id="mistake-week">0</strong><em>道</em></div>
+            <div class="stat-card"><span class="stat-label">涉及课程</span><strong id="mistake-courses">0</strong><em>门</em></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div><h2>错题列表</h2><p>可标注考点与心得，方便考前回看</p></div>
+              <div class="log-head-actions">
+                <select class="select compact" id="mistake-filter" aria-label="按课程筛选"><option value="all">全部课程</option></select>
+              </div>
+            </div>
+            <div class="mistake-list" id="mistake-list"></div>
+          </div>
+        </section>
+
         <section class="page" id="page-logs" aria-labelledby="logs-title">
           <div class="page-head">
             <div>
@@ -414,7 +506,7 @@
               </div>
 
               <div class="panel settings-panel about-panel">
-                <div class="about-brand"><img src="assets/icon.png" alt="" /><div><strong>课铃 ClassBell</strong><span id="about-version">v1.0.2</span></div></div>
+                <div class="about-brand"><img src="assets/icon.png" alt="" /><div><strong>课铃 ClassBell</strong><span id="about-version">v1.0.3</span></div></div>
                 <p>面向大学生的轻量课程任务提醒工具。非学习通官方产品，仅读取你本人有权访问的课程数据。</p>
                 <div class="about-links">
                   <button class="link-btn" id="btn-open-data-2"><svg><use href="#i-folder"/></svg>数据目录</button>
@@ -485,6 +577,78 @@
             <button type="button" class="btn btn-ghost" id="task-cancel">取消</button>
             <button type="submit" class="btn btn-primary" id="task-save">保存日程</button>
           </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="notice-modal" hidden>
+    <div class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="notice-modal-title">
+      <div class="modal-head">
+        <div><span class="modal-eyebrow">通知</span><h2 id="notice-modal-title">手动添加通知</h2></div>
+        <button class="icon-btn" id="notice-modal-close" aria-label="关闭"><svg><use href="#i-x"/></svg></button>
+      </div>
+      <form id="notice-form" novalidate>
+        <div class="form-grid">
+          <label class="field span-2"><span>标题 <i>*</i></span><input id="notice-title" maxlength="180" placeholder="例如：实验室器材归还提醒" autocomplete="off" /></label>
+          <label class="field"><span>课程 / 来源</span><input id="notice-course" maxlength="80" placeholder="例如：工程数学" autocomplete="off" /></label>
+          <label class="field"><span>类型</span><select id="notice-kind" class="select">
+            <option value="notice">通知</option><option value="assignment">作业</option><option value="exam">考试</option><option value="gear">器材</option>
+          </select></label>
+          <label class="field span-2"><span>正文</span><textarea id="notice-body" rows="4" maxlength="1200" placeholder="补充说明、地点或要求…"></textarea></label>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" id="notice-cancel">取消</button>
+          <button type="submit" class="btn btn-primary" id="notice-save">保存通知</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="gear-modal" hidden>
+    <div class="modal modal-medium" role="dialog" aria-modal="true" aria-labelledby="gear-modal-title">
+      <div class="modal-head">
+        <div><span class="modal-eyebrow">器材借还</span><h2 id="gear-modal-title">登记借出</h2></div>
+        <button class="icon-btn" id="gear-modal-close" aria-label="关闭"><svg><use href="#i-x"/></svg></button>
+      </div>
+      <form id="gear-form" novalidate>
+        <input type="hidden" id="gear-id" />
+        <div class="form-grid">
+          <label class="field span-2"><span>器材名称 <i>*</i></span><input id="gear-name" maxlength="120" placeholder="例如：数字示波器" autocomplete="off" /></label>
+          <label class="field"><span>编号</span><input id="gear-code" maxlength="60" placeholder="例如：OSC-07" autocomplete="off" /></label>
+          <label class="field"><span>借用人</span><input id="gear-borrower" maxlength="60" placeholder="姓名 / 小组" autocomplete="off" /></label>
+          <label class="field"><span>借出时间</span><input id="gear-borrowed" type="datetime-local" /></label>
+          <label class="field"><span>应还时间</span><input id="gear-due" type="datetime-local" /></label>
+          <label class="field span-2"><span>备注</span><textarea id="gear-note" rows="3" maxlength="500" placeholder="配件、存放位置或验收要求…"></textarea></label>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" id="gear-cancel">取消</button>
+          <button type="submit" class="btn btn-primary" id="gear-save">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="mistake-modal" hidden>
+    <div class="modal modal-medium" role="dialog" aria-modal="true" aria-labelledby="mistake-modal-title">
+      <div class="modal-head">
+        <div><span class="modal-eyebrow">错题归档</span><h2 id="mistake-modal-title">记录一道错题</h2></div>
+        <button class="icon-btn" id="mistake-modal-close" aria-label="关闭"><svg><use href="#i-x"/></svg></button>
+      </div>
+      <form id="mistake-form" novalidate>
+        <input type="hidden" id="mistake-id" />
+        <div class="form-grid">
+          <label class="field"><span>课程</span><input id="mistake-course" maxlength="80" placeholder="例如：工程数学" autocomplete="off" /></label>
+          <label class="field"><span>来源作业</span><input id="mistake-title" maxlength="160" placeholder="例如：第三次作业" autocomplete="off" /></label>
+          <label class="field span-2"><span>题目 <i>*</i></span><textarea id="mistake-question" rows="3" maxlength="2000" placeholder="题干或题号…"></textarea></label>
+          <label class="field"><span>我的答案</span><input id="mistake-my" maxlength="800" placeholder="当时写的" autocomplete="off" /></label>
+          <label class="field"><span>正确答案</span><input id="mistake-correct" maxlength="800" placeholder="标准答案" autocomplete="off" /></label>
+          <label class="field span-2"><span>解析 / 心得</span><textarea id="mistake-analysis" rows="3" maxlength="1200" placeholder="错在哪、下次怎么避免…"></textarea></label>
+          <label class="field span-2"><span>考点标签</span><input id="mistake-tags" maxlength="120" placeholder="用逗号分隔，例如：极限,等价无穷小" autocomplete="off" /></label>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" id="mistake-cancel">取消</button>
+          <button type="submit" class="btn btn-primary" id="mistake-save">归档</button>
         </div>
       </form>
     </div>

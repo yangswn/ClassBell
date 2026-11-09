@@ -8,7 +8,10 @@ const {
   extractDeadline,
   parseTimeValue,
   stripTags,
-  dedupe
+  dedupe,
+  parseNoticeFeed,
+  parseNoticeHtml,
+  parseMistakeHtml
 } = require('./chaoxing-parser');
 
 const LOGIN_URL = 'https://passport2.chaoxing.com/login?fid=&newversion=true&refer=https%3A%2F%2Fi.chaoxing.com';
@@ -212,6 +215,83 @@ class ChaoxingService {
       meta: { checked: targets.length, found }
     });
     return { checked: targets.length, found };
+  }
+
+  /**
+   * Best-effort notice extraction. Chaoxing has no stable public notice API,
+   * so several known endpoints are tried and the first usable payload wins.
+   */
+  async fetchNotices() {
+    const started = Date.now();
+    const urls = [
+      'https://notice.chaoxing.com/pc/notice/list?page=1&size=30',
+      'https://i.chaoxing.com/base/message/notice/list?page=1&size=30',
+      'https://mooc1.chaoxing.com/mooc-ans/notice/list?page=1&size=30'
+    ];
+    for (const url of urls) {
+      try {
+        const res = await this._fetch(url, { timeout: 12000 });
+        const text = res.text.trim();
+        const notices = text.startsWith('{') || text.startsWith('[')
+          ? parseNoticeFeed(JSON.parse(text.replace(/^\uFEFF/, '')))
+          : parseNoticeHtml(text, url);
+        if (notices.length) {
+          this.telemetry.log('notices_extracted', {
+            durationMs: Date.now() - started,
+            meta: { count: notices.length, via: 'api' }
+          });
+          return { ok: true, notices, source: 'api' };
+        }
+      } catch (_) { /* try next */ }
+    }
+    this.telemetry.log('notices_extracted', {
+      durationMs: Date.now() - started,
+      ok: false,
+      error: { code: 'NOTICE_SOURCE_UNAVAILABLE', message: 'no notice endpoint returned data' },
+      meta: { count: 0, via: 'api' }
+    });
+    return { ok: false, notices: [], code: 'NOTICE_SOURCE_UNAVAILABLE' };
+  }
+
+  /**
+   * Read finished work pages and keep the questions whose answers were wrong.
+   */
+  async collectMistakes(tasks, { limit = 12 } = {}) {
+    const started = Date.now();
+    const targets = (Array.isArray(tasks) ? tasks : [])
+      .filter((t) => t && t.sourceUrl && (t.status === 'done' || t.status === 'missed'))
+      .slice(0, limit);
+    if (!targets.length) return { ok: true, mistakes: [], checked: 0, found: 0 };
+
+    const out = [];
+    let index = 0;
+    const workers = Array.from({ length: Math.min(3, targets.length) }, async () => {
+      while (index < targets.length) {
+        const task = targets[index++];
+        try {
+          const res = await this._fetch(task.sourceUrl, { timeout: 14000 });
+          const parsed = parseMistakeHtml(res.text, task.sourceUrl);
+          parsed.forEach((item, i) => {
+            out.push({
+              ...item,
+              course: task.course || '',
+              title: task.title || '',
+              source: 'chaoxing',
+              sourceUrl: task.sourceUrl,
+              sourceKey: `cx:mistake:${task.sourceKey || task.id}:${i}:${item.question.slice(0, 40)}`,
+              wrongAt: task.completedAt || task.missedAt || new Date().toISOString()
+            });
+          });
+        } catch (_) { /* skip unreadable page */ }
+      }
+    });
+    await Promise.all(workers);
+
+    this.telemetry.log('mistakes_extracted', {
+      durationMs: Date.now() - started,
+      meta: { checked: targets.length, found: out.length }
+    });
+    return { ok: true, mistakes: out, checked: targets.length, found: out.length };
   }
 
   async sync() {

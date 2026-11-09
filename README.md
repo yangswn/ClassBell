@@ -2,7 +2,7 @@
 
 > 把该做的事放在眼前，剩下的交给课铃。
 
-课铃是一个面向大学生的 Windows 轻量课程任务提醒工具：登录学习通后自动读取作业、考试与截止时间，也可以完全离线手动记录课程日程；到期前通过桌面弹窗、托盘和声音提醒。
+课铃是一个面向大学生的 Windows 轻量课程任务提醒工具：登录学习通后自动读取作业、考试与截止时间，也可以完全离线手动记录课程日程；到期前通过桌面弹窗、托盘和声音提醒。此外还提供通知提取、器材借还核对和按课程归档的错题本。
 
 ![今日概览](docs/screenshots/dashboard.png)
 
@@ -22,7 +22,7 @@
 
 ## 安装
 
-安装包：`dist/ClassBell-Setup-1.0.2.exe`（约 32 MB，64 位 Windows 10/11）。
+安装包：`dist/ClassBell-Setup-1.0.3.exe`（约 32 MB，64 位 Windows 10/11）。
 
 1. 双击安装包，阅读并勾选许可协议，选择安装位置。
 2. 安装器会释放本地服务、WebView2 宿主与图标，创建开始菜单/桌面快捷方式。
@@ -112,7 +112,7 @@ powershell -File scripts\build-setup.ps1
 产物：
 
 - `dist\ClassBell\`：免安装目录（可直接运行 `ClassBell.exe`）
-- `dist\ClassBell-Setup-1.0.2.exe`：安装包
+- `dist\ClassBell-Setup-1.0.3.exe`：安装包
 
 WebView2 SDK 已放在 `desktop/lib/`；Node 运行时从本机 `node.exe` 复制到 `runtime/node.exe`。
 

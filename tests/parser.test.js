@@ -1,10 +1,10 @@
-﻿'use strict';
+'use strict';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   extractDeadline, parseTaskFeed, parseBackClazz, parseWorkListHtml,
-  parseExamListHtml, parsePageRows
+  parseExamListHtml, parsePageRows, parseNoticeHtml, parseMistakeHtml
 } = require('../server/chaoxing-parser');
 
 const NOW = new Date(2026, 10, 9, 12, 0, 0);
@@ -109,3 +109,37 @@ test('parsePageRows extracts a page candidate only with a real title', () => {
   assert.ok(rows[0].dueAt);
 });
 
+
+/* ---------------------------------------------- notices / gear / mistakes */
+
+test('parseNoticeHtml keeps notice links and their own timestamps', () => {
+  const html = [
+    '<ul><li><a href="/notice/1">关于期中考试安排的通知</a><span>2026-11-08 10:00</span></li>',
+    '<li><a href="/notice/2">第三次作业提交提醒</a><span>2026-11-09 08:30</span></li>',
+    '<li><a href="/login">登录</a></li></ul>'
+  ].join('');
+  const list = parseNoticeHtml(html, 'https://mooc1.chaoxing.com');
+  assert.equal(list.length, 2);
+  assert.match(list[0].sourceUrl, /notice\/1/);
+  assert.notEqual(list[0].publishedAt, list[1].publishedAt);
+});
+
+test('parseMistakeHtml prefers the question stem over option lines', () => {
+  const html = [
+    '<div><p>1. 下列哪个是质数</p>',
+    '<p>A. 4 B. 6 C. 7 D. 9</p>',
+    '<p>我的答案：A</p>',
+    '<p>正确答案：C</p>',
+    '<p>答案解析：7 只有 1 和自身两个因数</p></div>'
+  ].join('');
+  const list = parseMistakeHtml(html);
+  assert.equal(list.length, 1);
+  assert.match(list[0].question, /哪个是质数/);
+  assert.equal(list[0].myAnswer, 'A');
+  assert.equal(list[0].correctAnswer, 'C');
+});
+
+test('a correct answer without a wrong marker is not archived', () => {
+  const html = '<p>2. 填空题</p><p>我的答案：正确内容</p><p>正确答案：正确内容</p>';
+  assert.equal(parseMistakeHtml(html).length, 0);
+});

@@ -161,6 +161,22 @@
     dismissCandidate: (id) => request('POST', '/api/candidates/dismiss', { id }),
     openLogin: () => host('openLogin'),
 
+    addNotice: (notice) => request('POST', '/api/notices', notice),
+    updateNotice: (id, patch) => request('PATCH', `/api/notices/${encodeURIComponent(id)}`, patch),
+    deleteNotice: (id) => request('DELETE', `/api/notices/${encodeURIComponent(id)}`),
+    readAllNotices: () => request('POST', '/api/notices/read-all', {}),
+    extractNotices: () => request('POST', '/api/notices/extract', {}),
+
+    addGear: (item) => request('POST', '/api/gear', item),
+    updateGear: (id, patch) => request('PATCH', `/api/gear/${encodeURIComponent(id)}`, patch),
+    returnGear: (id, extra) => request('POST', `/api/gear/${encodeURIComponent(id)}/return`, extra || {}),
+    deleteGear: (id) => request('DELETE', `/api/gear/${encodeURIComponent(id)}`),
+
+    addMistake: (item) => request('POST', '/api/mistakes', item),
+    updateMistake: (id, patch) => request('PATCH', `/api/mistakes/${encodeURIComponent(id)}`, patch),
+    deleteMistake: (id) => request('DELETE', `/api/mistakes/${encodeURIComponent(id)}`),
+    extractMistakes: () => request('POST', '/api/mistakes/extract', {}),
+
     testReminder: () => host('testReminder'),
     reminderAction: async (action, taskId, minutes, firedAt) => {
       const result = await request('POST', '/api/reminders/action', { action, taskId, minutes, firedAt });

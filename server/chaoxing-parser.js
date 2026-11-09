@@ -355,6 +355,147 @@ function candidateReason(task) {
   return '已识别';
 }
 
+/* ------------------------------------------------------ notices / mistakes */
+
+function htmlToLines(html) {
+  const text = String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|li|tr|td|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ');
+  return decodeEntities(text)
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+const NOTICE_SKIP = /登录|注册|忘记密码|下载客户端|版权所有|技术支持|客服|隐私政策|用户协议/;
+
+function parseNoticeFeed(payload) {
+  const arrays = [];
+  const visit = (value, depth) => {
+    if (depth > 4 || value === null || value === undefined) return;
+    if (Array.isArray(value)) {
+      if (value.length && value.some((v) => v && typeof v === 'object' && (v.title || v.noticeTitle || v.subject))) {
+        arrays.push(value);
+      }
+      return;
+    }
+    if (typeof value === 'object') {
+      for (const key of Object.keys(value)) visit(value[key], depth + 1);
+    }
+  };
+  visit(payload, 0);
+  const best = arrays.sort((a, b) => b.length - a.length)[0] || [];
+  const out = [];
+  for (const item of best.slice(0, 120)) {
+    if (!item || typeof item !== 'object') continue;
+    const title = String(item.title || item.noticeTitle || item.subject || item.name || '').trim();
+    if (!title || title.length < 3 || NOTICE_SKIP.test(title)) continue;
+    const body = String(item.content || item.body || item.summary || item.desc || '').trim();
+    const timeRaw = item.createTime || item.publishTime || item.sendTime || item.time || item.pubTime || '';
+    const parsed = parseTimeValue(timeRaw);
+    out.push({
+      title: title.slice(0, 180),
+      body: body.slice(0, 500),
+      kind: /考试|测验/.test(title) ? 'exam' : (/作业|任务|提交/.test(title) ? 'assignment' : 'notice'),
+      publishedAt: parsed ? parsed.toISOString() : null,
+      sourceUrl: String(item.url || item.link || item.noticeUrl || '').trim(),
+      sourceKey: `cx:notice:${hashKey(`${title}|${timeRaw}`)}`
+    });
+  }
+  return dedupeNotices(out);
+}
+
+function parseNoticeHtml(html, base) {
+  const raw = String(html || '');
+  const out = [];
+  const re = /<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]{2,240}?)<\/a>/gi;
+  let match;
+  while ((match = re.exec(raw))) {
+    const href = match[1];
+    if (!/notice|message|inform|tzgg|gonggao/i.test(href)) continue;
+    const title = stripTags(match[2]);
+    if (!title || title.length < 4 || title.length > 120 || NOTICE_SKIP.test(title)) continue;
+    if (!/[\u4e00-\u9fa5A-Za-z]/.test(title)) continue;
+    const around = raw.slice(match.index, match.index + match[0].length + 200);
+    const timeHit = /(\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?|\d{1,2}-\d{1,2}\s+\d{2}:\d{2})/.exec(stripTags(around));
+    const parsed = timeHit ? parseTimeValue(timeHit[1]) : null;
+    out.push({
+      title: title.slice(0, 180),
+      body: '',
+      kind: /考试|测验/.test(title) ? 'exam' : (/作业|提交/.test(title) ? 'assignment' : 'notice'),
+      publishedAt: parsed ? parsed.toISOString() : null,
+      sourceUrl: absoluteUrl(base, href),
+      sourceKey: `cx:notice:${hashKey(`${title}|${href}`)}`
+    });
+  }
+  return dedupeNotices(out);
+}
+
+function dedupeNotices(list) {
+  const map = new Map();
+  for (const item of list) {
+    if (!item || !item.title) continue;
+    if (!map.has(item.sourceKey)) map.set(item.sourceKey, item);
+  }
+  return [...map.values()];
+}
+
+function parseMistakeHtml(html, base) {
+  const lines = htmlToLines(html);
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!/我的答案|我的作答|学生答案/.test(line)) continue;
+    const myAnswer = line.replace(/^.*?(?:我的答案|我的作答|学生答案)\s*[:：]?\s*/, '').slice(0, 400);
+    let question = '';
+    let score = -1;
+    for (let j = i - 1; j >= Math.max(0, i - 10); j -= 1) {
+      const prev = lines[j];
+      if (!prev) continue;
+      if (/正确答案|答案解析|我的答案|得分|批阅|教师点评|试题解析/.test(prev)) continue;
+      if (prev.length < 6) continue;
+      if (/^[A-Fa-f][.、．)）]/.test(prev)) continue;
+      let current = 1;
+      if (/^\d+[.、．)）]/.test(prev)) current += 3;
+      if (/[？?]$/.test(prev)) current += 2;
+      current += Math.min(2, Math.floor(prev.length / 24));
+      if (current > score) {
+        score = current;
+        question = prev;
+      }
+      if (current >= 4) break;
+    }
+    if (!question) continue;
+    let correctAnswer = '';
+    let analysis = '';
+    for (let j = i + 1; j < Math.min(lines.length, i + 14); j += 1) {
+      const next = lines[j];
+      if (/正确答案/.test(next)) {
+        correctAnswer = next.replace(/^.*?正确答案\s*[:：]?\s*/, '').slice(0, 400);
+      } else if (/答案解析|试题解析|解析/.test(next)) {
+        analysis = next.replace(/^.*?(?:答案解析|试题解析|解析)\s*[:：]?\s*/, '').slice(0, 600);
+      } else if (/我的答案/.test(next)) {
+        break;
+      }
+      if (correctAnswer && analysis) break;
+    }
+    if (!correctAnswer && !/错误|不正确|答错/.test(lines.slice(Math.max(0, i - 3), i + 3).join(' '))) continue;
+    const normalize = (text) => String(text || '').replace(/\s+/g, '').toLowerCase();
+    if (myAnswer && correctAnswer && normalize(myAnswer) === normalize(correctAnswer)) continue;
+    out.push({
+      question: question.slice(0, 600),
+      myAnswer,
+      correctAnswer,
+      analysis,
+      sourceUrl: absoluteUrl(base || 'https://mooc1.chaoxing.com', '')
+    });
+  }
+  return out;
+}
+
 module.exports = {
   extractDeadline,
   parseTimeValue,
@@ -367,5 +508,9 @@ module.exports = {
   stripTags,
   decodeEntities,
   candidateReason,
-  hashKey
+  hashKey,
+  htmlToLines,
+  parseNoticeFeed,
+  parseNoticeHtml,
+  parseMistakeHtml
 };

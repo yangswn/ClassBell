@@ -7,6 +7,9 @@ const crypto = require('crypto');
 const SCHEMA = 1;
 const MAX_TASKS = 2000;
 const MAX_CANDIDATES = 200;
+const MAX_NOTICES = 400;
+const MAX_GEAR = 300;
+const MAX_MISTAKES = 1200;
 const NO_DEADLINE_ISO = '2099-12-31T23:59:00.000Z';
 
 const CATEGORIES = new Set(['homework', 'exam', 'schedule', 'other']);
@@ -67,6 +70,9 @@ function defaultState() {
     updatedAt: ts,
     tasks: [],
     candidates: [],
+    notices: [],
+    gear: [],
+    mistakes: [],
     settings: defaultSettings(),
     sync: {
       lastSyncAt: null,
@@ -88,8 +94,81 @@ function defaultState() {
   };
 }
 
-function normalizeOffsets(input, fallback = [60, 10]) {
-  const raw = Array.isArray(input) ? input : fallback;
+const NOTICE_KINDS = new Set(['assignment', 'exam', 'gear', 'notice', 'system']);
+
+function normalizeNotice(input, existing = null) {
+  const base = existing || {};
+  const title = cleanText(input.title ?? base.title, 180);
+  if (!title) throw new Error('NOTICE_TITLE_REQUIRED');
+  const kind = NOTICE_KINDS.has(input.kind) ? input.kind : (base.kind || 'notice');
+  const published = parseDate(input.publishedAt ?? base.publishedAt);
+  return {
+    id: base.id || uid('n_'),
+    title,
+    body: cleanText(input.body ?? base.body, 1200),
+    course: cleanText(input.course ?? base.course, 80),
+    kind,
+    read: Boolean(input.read ?? base.read),
+    source: ['chaoxing', 'local', 'manual'].includes(input.source) ? input.source : (base.source || 'manual'),
+    sourceKey: cleanText(input.sourceKey ?? base.sourceKey, 160) || '',
+    sourceUrl: cleanText(input.sourceUrl ?? base.sourceUrl, 600) || '',
+    publishedAt: published ? published.toISOString() : (base.publishedAt || nowIso()),
+    createdAt: base.createdAt || nowIso()
+  };
+}
+
+function normalizeGear(input, existing = null) {
+  const base = existing || {};
+  const name = cleanText(input.name ?? base.name, 120);
+  if (!name) throw new Error('GEAR_NAME_REQUIRED');
+  const due = parseDate(input.dueAt ?? base.dueAt);
+  const returned = parseDate(input.returnedAt ?? base.returnedAt);
+  const borrowed = parseDate(input.borrowedAt ?? base.borrowedAt) || new Date();
+  const status = input.status === 'returned' || returned ? 'returned' : 'out';
+  return {
+    id: base.id || uid('g_'),
+    name,
+    code: cleanText(input.code ?? base.code, 60),
+    borrower: cleanText(input.borrower ?? base.borrower, 60),
+    keeper: cleanText(input.keeper ?? base.keeper, 60),
+    borrowedAt: borrowed.toISOString(),
+    dueAt: due ? due.toISOString() : '',
+    returnedAt: status === 'returned' ? (returned ? returned.toISOString() : nowIso()) : '',
+    status,
+    condition: cleanText(input.condition ?? base.condition, 40),
+    note: cleanText(input.note ?? base.note, 500),
+    createdAt: base.createdAt || nowIso(),
+    updatedAt: nowIso()
+  };
+}
+
+function normalizeMistake(input, existing = null) {
+  const base = existing || {};
+  const question = cleanText(input.question ?? base.question, 2000);
+  if (!question) throw new Error('MISTAKE_QUESTION_REQUIRED');
+  const wrong = parseDate(input.wrongAt ?? base.wrongAt);
+  return {
+    id: base.id || uid('m_'),
+    course: cleanText(input.course ?? base.course, 80),
+    title: cleanText(input.title ?? base.title, 160),
+    question,
+    myAnswer: cleanText(input.myAnswer ?? base.myAnswer, 800),
+    correctAnswer: cleanText(input.correctAnswer ?? base.correctAnswer, 800),
+    analysis: cleanText(input.analysis ?? base.analysis, 1200),
+    note: cleanText(input.note ?? base.note, 800),
+    tags: Array.isArray(input.tags ?? base.tags)
+      ? [...new Set((input.tags ?? base.tags).map((t) => cleanText(t, 24)).filter(Boolean))].slice(0, 8)
+      : [],
+    source: input.source === 'chaoxing' ? 'chaoxing' : (base.source || 'manual'),
+    sourceKey: cleanText(input.sourceKey ?? base.sourceKey, 200) || '',
+    sourceUrl: cleanText(input.sourceUrl ?? base.sourceUrl, 600) || '',
+    wrongAt: wrong ? wrong.toISOString() : (base.wrongAt || nowIso()),
+    createdAt: base.createdAt || nowIso(),
+    updatedAt: nowIso()
+  };
+}
+
+function normalizeOffsets(input, fallback = [60, 10]) {  const raw = Array.isArray(input) ? input : fallback;
   const values = [...new Set(raw.map((v) => safeInt(v, -1))
     .filter((v) => v >= 0 && v <= 10080))]
     .sort((a, b) => b - a);
@@ -230,6 +309,21 @@ class Store {
         discoveredAt: cleanText(c.discoveredAt, 40) || nowIso()
       }))
       : [];
+    const notices = Array.isArray(raw.notices)
+      ? raw.notices.slice(0, MAX_NOTICES).map((n) => {
+        try { return normalizeNotice(n, n); } catch (_) { return null; }
+      }).filter(Boolean)
+      : [];
+    const gear = Array.isArray(raw.gear)
+      ? raw.gear.slice(0, MAX_GEAR).map((g) => {
+        try { return normalizeGear(g, g); } catch (_) { return null; }
+      }).filter(Boolean)
+      : [];
+    const mistakes = Array.isArray(raw.mistakes)
+      ? raw.mistakes.slice(0, MAX_MISTAKES).map((m) => {
+        try { return normalizeMistake(m, m); } catch (_) { return null; }
+      }).filter(Boolean)
+      : [];
     return {
       ...base,
       ...raw,
@@ -237,6 +331,9 @@ class Store {
       settings,
       tasks,
       candidates,
+      notices,
+      gear,
+      mistakes,
       sync: { ...base.sync, ...(raw.sync || {}) },
       metrics: { ...base.metrics, ...(raw.metrics || {}) }
     };
@@ -578,12 +675,183 @@ class Store {
     return true;
   }
 
+  /* ------------------------------------------------------------ notices */
+
+  addNotice(input) {
+    const notice = normalizeNotice(input);
+    if (notice.sourceKey) {
+      const existing = this.state.notices.find((n) => n.sourceKey && n.sourceKey === notice.sourceKey);
+      if (existing) {
+        existing.title = notice.title || existing.title;
+        existing.body = notice.body || existing.body;
+        existing.publishedAt = notice.publishedAt;
+        existing.sourceUrl = notice.sourceUrl || existing.sourceUrl;
+        this.scheduleSave();
+        return { notice: existing, created: false };
+      }
+    }
+    this.state.notices.unshift(notice);
+    this.state.notices = this.state.notices.slice(0, MAX_NOTICES);
+    this.scheduleSave();
+    return { notice, created: true };
+  }
+
+  addNotices(list) {
+    const stats = { added: 0, updated: 0, skipped: 0 };
+    for (const item of Array.isArray(list) ? list : []) {
+      try {
+        const result = this.addNotice(item);
+        if (result.created) stats.added += 1;
+        else stats.updated += 1;
+      } catch (_) {
+        stats.skipped += 1;
+      }
+    }
+    return stats;
+  }
+
+  markNotice(id, read = true) {
+    const notice = this.state.notices.find((n) => n.id === id);
+    if (!notice) throw new Error('NOTICE_NOT_FOUND');
+    notice.read = Boolean(read);
+    this.scheduleSave();
+    return notice;
+  }
+
+  markAllNoticesRead() {
+    let count = 0;
+    for (const notice of this.state.notices) {
+      if (!notice.read) { notice.read = true; count += 1; }
+    }
+    this.scheduleSave();
+    return { updated: count };
+  }
+
+  deleteNotice(id) {
+    const before = this.state.notices.length;
+    this.state.notices = this.state.notices.filter((n) => n.id !== id);
+    if (this.state.notices.length === before) throw new Error('NOTICE_NOT_FOUND');
+    this.scheduleSave();
+    return true;
+  }
+
+  /* --------------------------------------------------------------- gear */
+
+  addGear(input) {
+    const item = normalizeGear(input);
+    this.state.gear.unshift(item);
+    this.state.gear = this.state.gear.slice(0, MAX_GEAR);
+    this.scheduleSave();
+    return item;
+  }
+
+  updateGear(id, patch) {
+    const index = this.state.gear.findIndex((g) => g.id === id);
+    if (index < 0) throw new Error('GEAR_NOT_FOUND');
+    const next = normalizeGear({ ...this.state.gear[index], ...patch, id }, this.state.gear[index]);
+    this.state.gear[index] = next;
+    this.scheduleSave();
+    return next;
+  }
+
+  returnGear(id, extra = {}) {
+    return this.updateGear(id, {
+      status: 'returned',
+      returnedAt: extra.returnedAt || nowIso(),
+      condition: extra.condition !== undefined ? extra.condition : '正常',
+      note: extra.note !== undefined ? extra.note : undefined
+    });
+  }
+
+  deleteGear(id) {
+    const before = this.state.gear.length;
+    this.state.gear = this.state.gear.filter((g) => g.id !== id);
+    if (this.state.gear.length === before) throw new Error('GEAR_NOT_FOUND');
+    this.scheduleSave();
+    return true;
+  }
+
+  gearSummary() {
+    const now = Date.now();
+    const out = this.state.gear.filter((g) => g.status === 'out');
+    return {
+      total: this.state.gear.length,
+      out: out.length,
+      returned: this.state.gear.filter((g) => g.status === 'returned').length,
+      overdue: out.filter((g) => g.dueAt && new Date(g.dueAt).getTime() < now).length
+    };
+  }
+
+  /* ----------------------------------------------------------- mistakes */
+
+  addMistake(input) {
+    const mistake = normalizeMistake(input);
+    if (mistake.sourceKey) {
+      const existing = this.state.mistakes.find((m) => m.sourceKey && m.sourceKey === mistake.sourceKey);
+      if (existing) return { mistake: existing, created: false };
+    }
+    this.state.mistakes.unshift(mistake);
+    this.state.mistakes = this.state.mistakes.slice(0, MAX_MISTAKES);
+    this.scheduleSave();
+    return { mistake, created: true };
+  }
+
+  addMistakes(list) {
+    const stats = { added: 0, skipped: 0 };
+    for (const item of Array.isArray(list) ? list : []) {
+      try {
+        const result = this.addMistake(item);
+        if (result.created) stats.added += 1;
+        else stats.skipped += 1;
+      } catch (_) {
+        stats.skipped += 1;
+      }
+    }
+    return stats;
+  }
+
+  updateMistake(id, patch) {
+    const index = this.state.mistakes.findIndex((m) => m.id === id);
+    if (index < 0) throw new Error('MISTAKE_NOT_FOUND');
+    const next = normalizeMistake({ ...this.state.mistakes[index], ...patch, id }, this.state.mistakes[index]);
+    this.state.mistakes[index] = next;
+    this.scheduleSave();
+    return next;
+  }
+
+  deleteMistake(id) {
+    const before = this.state.mistakes.length;
+    this.state.mistakes = this.state.mistakes.filter((m) => m.id !== id);
+    if (this.state.mistakes.length === before) throw new Error('MISTAKE_NOT_FOUND');
+    this.scheduleSave();
+    return true;
+  }
+
+  mistakeSummary() {
+    const now = Date.now();
+    const week = 7 * 24 * 3600 * 1000;
+    const byCourse = new Map();
+    for (const item of this.state.mistakes) {
+      const key = item.course || '未分课程';
+      byCourse.set(key, (byCourse.get(key) || 0) + 1);
+    }
+    return {
+      total: this.state.mistakes.length,
+      week: this.state.mistakes.filter((m) => now - new Date(m.wrongAt).getTime() <= week).length,
+      courses: [...byCourse.entries()].map(([course, count]) => ({ course, count }))
+        .sort((a, b) => b.count - a.count)
+    };
+  }
+
   exportData() {
     return JSON.stringify({
       app: 'ClassBell',
       schema: SCHEMA,
       exportedAt: nowIso(),
       tasks: this.state.tasks,
+      notices: this.state.notices,
+      gear: this.state.gear,
+      mistakes: this.state.mistakes,
       settings: this.state.settings
     }, null, 2);
   }
@@ -608,6 +876,21 @@ class Store {
       existing.set(task.id, task);
     }
     this.state.tasks = [...existing.values()].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+    if (Array.isArray(parsed.gear)) {
+      for (const item of parsed.gear.slice(0, MAX_GEAR)) {
+        try { this.state.gear.push(normalizeGear(item)); } catch (_) { /* skip */ }
+      }
+    }
+    if (Array.isArray(parsed.mistakes)) {
+      for (const item of parsed.mistakes.slice(0, MAX_MISTAKES)) {
+        try { this.state.mistakes.push(normalizeMistake(item)); } catch (_) { /* skip */ }
+      }
+    }
+    if (Array.isArray(parsed.notices)) {
+      for (const item of parsed.notices.slice(0, MAX_NOTICES)) {
+        try { this.state.notices.push(normalizeNotice(item)); } catch (_) { /* skip */ }
+      }
+    }
     this.scheduleSave();
     return { imported: valid.length, total: this.state.tasks.length };
   }
@@ -630,7 +913,11 @@ class Store {
         return d >= now && d <= weekEnd.getTime();
       }).length,
       done: this.state.tasks.filter((t) => t.status === 'done').length,
-      missed: this.state.tasks.filter((t) => t.status === 'missed').length
+      missed: this.state.tasks.filter((t) => t.status === 'missed').length,
+      noticesUnread: this.state.notices.filter((n) => !n.read).length,
+      gearOut: this.gearSummary().out,
+      gearOverdue: this.gearSummary().overdue,
+      mistakes: this.state.mistakes.length
     };
   }
 }

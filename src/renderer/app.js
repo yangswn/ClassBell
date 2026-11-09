@@ -27,7 +27,9 @@ const App = {
   logsLoaded: false,
   modalOpen: false,
   lastPageView: '',
-  logsErrorOnly: false
+  logsErrorOnly: false,
+  noticeOpen: new Set(),
+  mistakeFilter: 'all'
 };
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -43,6 +45,7 @@ const UI_SCALES = [
 ];
 const DEFAULT_UI_SCALE = 1.1;
 const PRIORITY_LABEL = { normal: '普通', important: '重要', urgent: '紧急' };
+const NOTICE_KIND_LABEL = { assignment: '作业', exam: '考试', gear: '器材', notice: '通知', system: '系统' };
 const EVENT_LABEL = {
   app_start: '应用启动',
   app_stop: '应用退出',
@@ -302,11 +305,11 @@ async function boot() {
     }
     const params = new URLSearchParams(location.search);
     const initialPage = params.get('page');
-    if (['dashboard', 'tasks', 'integration', 'settings'].includes(initialPage)) {
+    if (['dashboard', 'tasks', 'integration', 'notices', 'gear', 'mistakes', 'settings'].includes(initialPage)) {
       setPage(initialPage);
     } else {
       const savedPage = localStorage.getItem('campus:lastPage');
-      if (['tasks', 'integration', 'settings'].includes(savedPage)) setPage(savedPage);
+      if (['tasks', 'integration', 'notices', 'gear', 'mistakes', 'settings'].includes(savedPage)) setPage(savedPage);
     }
     if (params.get('open') === 'task') {
       setTimeout(() => openTaskModal(), 360);
@@ -384,6 +387,9 @@ function renderAll() {
   renderDashboard();
   renderTasks();
   renderIntegration();
+  renderNotices();
+  renderGear();
+  renderMistakes();
   renderSettings();
   renderLogs();
   renderWelcome();
@@ -424,6 +430,13 @@ function renderSidebar() {
   $('#nav-badge').textContent = stats.pending > 0 ? String(stats.pending) : '';
   const dot = $('#nav-cx-dot');
   dot.hidden = !(App.auth && App.auth.loggedIn);
+  const setBadge = (selector, value) => {
+    const el = $(selector);
+    if (el) el.textContent = value > 0 ? String(value) : '';
+  };
+  setBadge('#nav-notice-badge', Number(stats.noticesUnread || 0));
+  setBadge('#nav-gear-badge', Number(stats.gearOverdue || 0));
+  setBadge('#nav-mistake-badge', 0);
   App.nextTask = nextPendingTask();
   updateCountdowns();
 }
@@ -678,6 +691,155 @@ function taskRowHTML(task) {
         <button class="task-action danger" data-act="delete" data-id="${esc(task.id)}" title="删除" aria-label="删除"><svg><use href="#i-trash"/></svg></button>
       </div>
     </div>`;
+}
+
+/* ------------------------------------------------- notices / gear / mistakes */
+
+function fmtWhen(iso) {
+  if (!iso) return '未设置';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '未设置';
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function noticeRowHTML(notice) {
+  const open = App.noticeOpen.has(notice.id);
+  const chipClass = notice.source === 'chaoxing' ? 'cx' : (notice.kind === 'gear' ? 'gear' : '');
+  return `
+    <div class="notice-item ${notice.read ? '' : 'unread'}" data-id="${esc(notice.id)}">
+      <span class="notice-dot"></span>
+      <div>
+        <div class="notice-title" data-act="toggle-notice" data-id="${esc(notice.id)}">${esc(notice.title)}</div>
+        <div class="notice-meta">
+          <span class="notice-chip ${chipClass}">${esc(NOTICE_KIND_LABEL[notice.kind] || '通知')}</span>
+          ${notice.course ? `<span>${esc(notice.course)}</span>` : ''}
+          <span>·</span>
+          <span>${esc(relativeSince(notice.publishedAt))}</span>
+          ${notice.source === 'chaoxing' ? '<span class="notice-chip cx">学习通</span>' : '<span class="notice-chip">本地</span>'}
+        </div>
+        ${open && notice.body ? `<div class="notice-body">${esc(notice.body)}</div>` : ''}
+      </div>
+      <div class="notice-actions">
+        <button class="mini-btn" data-act="read-notice" data-id="${esc(notice.id)}">${notice.read ? '标为未读' : '标为已读'}</button>
+        <button class="task-action danger" data-act="delete-notice" data-id="${esc(notice.id)}" title="删除" aria-label="删除"><svg><use href="#i-trash"/></svg></button>
+      </div>
+    </div>`;
+}
+
+function renderNotices() {
+  const list = App.state.notices || [];
+  const container = $('#notice-list');
+  if (!container) return;
+  $('#notice-unread').textContent = String(list.filter((n) => !n.read).length);
+  $('#notice-total').textContent = String(list.length);
+  const lastExtract = App.state.notices.find((n) => n.source === 'chaoxing');
+  $('#notice-last').textContent = lastExtract ? relativeSince(lastExtract.publishedAt) : '—';
+  container.innerHTML = list.length
+    ? list.map(noticeRowHTML).join('')
+    : '<div class="empty-row">还没有通知。点“从学习通提取”，或手动添加一条。</div>';
+}
+
+function gearSorted() {
+  const now = Date.now();
+  const list = [...(App.state.gear || [])];
+  const weight = (item) => {
+    if (item.status === 'returned') return 2;
+    return item.dueAt && new Date(item.dueAt).getTime() < now ? 0 : 1;
+  };
+  return list.sort((a, b) => {
+    const diff = weight(a) - weight(b);
+    if (diff !== 0) return diff;
+    if (a.status === 'returned') return new Date(b.returnedAt || b.updatedAt) - new Date(a.returnedAt || a.updatedAt);
+    return new Date(a.dueAt || a.borrowedAt) - new Date(b.dueAt || b.borrowedAt);
+  });
+}
+
+function gearRowHTML(item) {
+  const now = Date.now();
+  const overdue = item.status === 'out' && item.dueAt && new Date(item.dueAt).getTime() < now;
+  const stateClass = item.status === 'returned' ? 'returned' : (overdue ? 'overdue' : 'out');
+  let stateText = '已归还';
+  if (item.status === 'out') {
+    stateText = overdue ? `逾期 ${Math.max(1, Math.floor((now - new Date(item.dueAt).getTime()) / 86400000))} 天` : '借出中';
+  }
+  return `
+    <div class="gear-row" data-id="${esc(item.id)}">
+      <div class="gear-main">
+        <div class="gear-name">${esc(item.name)}${item.code ? ` · ${esc(item.code)}` : ''}</div>
+        <div class="gear-meta">
+          <span>${esc(item.borrower || '借用人未填')}</span>
+          <span>·</span><span>借于 ${esc(fmtWhen(item.borrowedAt))}</span>
+          <span>·</span><span>应还 ${esc(item.dueAt ? fmtWhen(item.dueAt) : '未设置')}</span>
+          ${item.returnedAt ? `<span>·</span><span>还于 ${esc(fmtWhen(item.returnedAt))}</span>` : ''}
+          ${item.note ? `<span>·</span><span>${esc(item.note)}</span>` : ''}
+        </div>
+      </div>
+      <div class="gear-state ${stateClass}">${esc(stateText)}</div>
+      <div class="gear-actions">
+        ${item.status === 'out' ? `<button class="mini-btn" data-act="return-gear" data-id="${esc(item.id)}">归还</button>` : ''}
+        <button class="task-action" data-act="edit-gear" data-id="${esc(item.id)}" title="编辑" aria-label="编辑"><svg><use href="#i-edit"/></svg></button>
+        <button class="task-action danger" data-act="delete-gear" data-id="${esc(item.id)}" title="删除" aria-label="删除"><svg><use href="#i-trash"/></svg></button>
+      </div>
+    </div>`;
+}
+
+function renderGear() {
+  const container = $('#gear-list');
+  if (!container) return;
+  const list = App.state.gear || [];
+  const now = Date.now();
+  const out = list.filter((g) => g.status === 'out');
+  $('#gear-out').textContent = String(out.length);
+  $('#gear-overdue').textContent = String(out.filter((g) => g.dueAt && new Date(g.dueAt).getTime() < now).length);
+  $('#gear-returned').textContent = String(list.filter((g) => g.status === 'returned').length);
+  container.innerHTML = list.length
+    ? gearSorted().map(gearRowHTML).join('')
+    : '<div class="empty-row">还没有登记器材。点“登记借出”记录第一件。</div>';
+}
+
+function mistakeCardHTML(item) {
+  return `
+    <div class="mistake-card" data-id="${esc(item.id)}">
+      <div class="mistake-head">
+        <span class="mistake-course">${esc(item.course || '未分课程')}</span>
+        ${item.title ? `<span class="mistake-src">${esc(item.title)}</span>` : ''}
+        <span class="mistake-src">· ${esc(relativeSince(item.wrongAt))}</span>
+        <span class="notice-chip ${item.source === 'chaoxing' ? 'cx' : ''}">${item.source === 'chaoxing' ? '自动归档' : '手动记录'}</span>
+        <span style="margin-left:auto"></span>
+        <button class="task-action" data-act="edit-mistake" data-id="${esc(item.id)}" title="编辑" aria-label="编辑"><svg><use href="#i-edit"/></svg></button>
+        <button class="task-action danger" data-act="delete-mistake" data-id="${esc(item.id)}" title="删除" aria-label="删除"><svg><use href="#i-trash"/></svg></button>
+      </div>
+      <div class="mistake-q">${esc(item.question)}</div>
+      <div class="mistake-answers">
+        <div class="answer-box wrong"><span>我的答案</span>${esc(item.myAnswer || '未记录')}</div>
+        <div class="answer-box right"><span>正确答案</span>${esc(item.correctAnswer || '未记录')}</div>
+      </div>
+      ${item.analysis ? `<div class="mistake-note">${esc(item.analysis)}</div>` : ''}
+      ${item.tags && item.tags.length ? `<div class="mistake-tags">${item.tags.map((t) => `<span class="mistake-tag">${esc(t)}</span>`).join('')}</div>` : ''}
+    </div>`;
+}
+
+function renderMistakes() {
+  const container = $('#mistake-list');
+  if (!container) return;
+  const list = App.state.mistakes || [];
+  const courses = [...new Set(list.map((m) => m.course).filter(Boolean))];
+  const select = $('#mistake-filter');
+  if (select) {
+    const current = App.mistakeFilter;
+    select.innerHTML = '<option value="all">全部课程</option>'
+      + courses.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    select.value = courses.includes(current) ? current : 'all';
+    App.mistakeFilter = select.value;
+  }
+  const visible = App.mistakeFilter === 'all' ? list : list.filter((m) => m.course === App.mistakeFilter);
+  $('#mistake-total').textContent = String(list.length);
+  const week = 7 * 86400000;
+  $('#mistake-week').textContent = String(list.filter((m) => Date.now() - new Date(m.wrongAt).getTime() <= week).length);
+  $('#mistake-courses').textContent = String(courses.length);
+  container.innerHTML = visible.length
+    ? visible.map(mistakeCardHTML).join('')
+    : '<div class="empty-row">还没有错题。可点“从学习通归档”读取已批阅作业，或手动补录。</div>';
 }
 
 function renderIntegration() {
@@ -1239,6 +1401,304 @@ function stepUiScale(direction) {
   toast(`界面大小：${UI_SCALES[index].label}（${UI_SCALES[index].note}）`, 'info', 1600);
 }
 
+/* --------------------------------------------- notices / gear / mistakes UI */
+
+async function refreshState() {
+  try {
+    applyPayload(await api.getState());
+  } catch (_) { /* keep current view */ }
+}
+
+async function toggleNotice(id) {
+  const notice = (App.state.notices || []).find((n) => n.id === id);
+  if (!notice) return;
+  const open = App.noticeOpen.has(id);
+  if (open) {
+    App.noticeOpen.delete(id);
+  } else {
+    App.noticeOpen.add(id);
+    if (!notice.read) {
+      try { await api.updateNotice(id, { read: true }); } catch (_) { /* ignore */ }
+      notice.read = true;
+    }
+  }
+  renderNotices();
+  renderSidebar();
+}
+
+async function readNotice(id) {
+  const notice = (App.state.notices || []).find((n) => n.id === id);
+  if (!notice) return;
+  const next = !notice.read;
+  try {
+    await api.updateNotice(id, { read: next });
+    notice.read = next;
+    renderNotices();
+    renderSidebar();
+  } catch (error) {
+    toast(`更新失败：${error.message || error}`, 'error');
+  }
+}
+
+async function deleteNotice(id) {
+  const ok = await confirmAction({
+    title: '删除这条通知？',
+    text: '只删除本机记录，不影响学习通里的原始通知。',
+    okText: '删除', icon: 'i-trash'
+  });
+  if (!ok) return;
+  try {
+    await api.deleteNotice(id);
+    App.noticeOpen.delete(id);
+    await refreshState();
+    toast('通知已删除。', 'success');
+  } catch (error) {
+    toast(`删除失败：${error.message || error}`, 'error');
+  }
+}
+
+async function extractNotices() {
+  const button = $('#btn-extract-notices');
+  if (button) button.disabled = true;
+  try {
+    const result = await api.extractNotices();
+    await refreshState();
+    if (result && result.added) toast(`提取完成，新增 ${result.added} 条通知。`, 'success', 4200);
+    else toast('没有新的通知；本地关键事件已经是最新的。', 'info', 4200);
+  } catch (error) {
+    toast(`提取失败：${error.message || error}`, 'error', 5000);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function readAllNotices() {
+  try {
+    const result = await api.readAllNotices();
+    await refreshState();
+    toast(result && result.updated ? `已标记 ${result.updated} 条为已读。` : '没有未读通知。', 'success');
+  } catch (error) {
+    toast(`操作失败：${error.message || error}`, 'error');
+  }
+}
+
+function openNoticeModal() {
+  $('#notice-form').reset();
+  $('#notice-kind').value = 'notice';
+  $('#notice-modal').hidden = false;
+  App.modalOpen = true;
+  setTimeout(() => $('#notice-title').focus(), 80);
+}
+
+function closeNoticeModal() {
+  $('#notice-modal').hidden = true;
+  App.modalOpen = false;
+}
+
+async function saveNotice(event) {
+  event.preventDefault();
+  const title = $('#notice-title').value.trim();
+  if (!title) { toast('请填写通知标题。', 'error'); $('#notice-title').focus(); return; }
+  try {
+    await api.addNotice({
+      title,
+      course: $('#notice-course').value.trim(),
+      kind: $('#notice-kind').value,
+      body: $('#notice-body').value.trim(),
+      source: 'manual'
+    });
+    closeNoticeModal();
+    await refreshState();
+    toast('通知已保存。', 'success');
+  } catch (error) {
+    toast(`保存失败：${error.message || error}`, 'error');
+  }
+}
+
+function gearNowInput() {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  return toLocalInput(d);
+}
+
+function openGearModal(item = null) {
+  const form = $('#gear-form');
+  form.reset();
+  $('#gear-id').value = item ? item.id : '';
+  $('#gear-modal-title').textContent = item ? '编辑器材记录' : '登记借出';
+  $('#gear-save').textContent = item ? '保存修改' : '登记借出';
+  if (item) {
+    $('#gear-name').value = item.name;
+    $('#gear-code').value = item.code || '';
+    $('#gear-borrower').value = item.borrower || '';
+    $('#gear-borrowed').value = item.borrowedAt ? toLocalInput(item.borrowedAt) : gearNowInput();
+    $('#gear-due').value = item.dueAt ? toLocalInput(item.dueAt) : '';
+    $('#gear-note').value = item.note || '';
+  } else {
+    $('#gear-borrowed').value = gearNowInput();
+    const due = new Date();
+    due.setDate(due.getDate() + 7);
+    due.setSeconds(0, 0);
+    $('#gear-due').value = toLocalInput(due);
+  }
+  $('#gear-modal').hidden = false;
+  App.modalOpen = true;
+  setTimeout(() => $('#gear-name').focus(), 80);
+}
+
+function closeGearModal() {
+  $('#gear-modal').hidden = true;
+  App.modalOpen = false;
+}
+
+async function saveGear(event) {
+  event.preventDefault();
+  const name = $('#gear-name').value.trim();
+  if (!name) { toast('请填写器材名称。', 'error'); $('#gear-name').focus(); return; }
+  const payload = {
+    name,
+    code: $('#gear-code').value.trim(),
+    borrower: $('#gear-borrower').value.trim(),
+    borrowedAt: fromLocalInput($('#gear-borrowed').value) || new Date().toISOString(),
+    dueAt: fromLocalInput($('#gear-due').value) || '',
+    note: $('#gear-note').value.trim()
+  };
+  const id = $('#gear-id').value;
+  try {
+    if (id) await api.updateGear(id, payload);
+    else await api.addGear(payload);
+    closeGearModal();
+    await refreshState();
+    toast(id ? '器材记录已更新。' : '已登记借出，到期会提醒你归还。', 'success');
+  } catch (error) {
+    toast(`保存失败：${error.message || error}`, 'error');
+  }
+}
+
+async function returnGear(id) {
+  const ok = await confirmAction({
+    title: '确认已归还？',
+    text: '会把这条记录标成已归还，并停止逾期提醒。',
+    okText: '已归还', danger: false, icon: 'i-check'
+  });
+  if (!ok) return;
+  try {
+    await api.returnGear(id, { condition: '正常' });
+    await refreshState();
+    toast('已核对归还。', 'success');
+  } catch (error) {
+    toast(`操作失败：${error.message || error}`, 'error');
+  }
+}
+
+async function deleteGear(id) {
+  const ok = await confirmAction({
+    title: '删除这条器材记录？',
+    text: '删除后不再参与借还核对。',
+    okText: '删除', icon: 'i-trash'
+  });
+  if (!ok) return;
+  try {
+    await api.deleteGear(id);
+    await refreshState();
+    toast('记录已删除。', 'success');
+  } catch (error) {
+    toast(`删除失败：${error.message || error}`, 'error');
+  }
+}
+
+function gearCheck() {
+  const out = (App.state.gear || []).filter((g) => g.status === 'out');
+  const overdue = out.filter((g) => g.dueAt && new Date(g.dueAt).getTime() < Date.now());
+  if (!out.length) toast('目前没有借出中的器材。', 'info', 3600);
+  else if (overdue.length) toast(`核对：${out.length} 件未还，其中 ${overdue.length} 件已逾期。`, 'error', 5200);
+  else toast(`核对：${out.length} 件借出中，都在应还时间内。`, 'success', 4200);
+}
+
+function openMistakeModal(item = null) {
+  const form = $('#mistake-form');
+  form.reset();
+  $('#mistake-id').value = item ? item.id : '';
+  $('#mistake-modal-title').textContent = item ? '编辑错题' : '记录一道错题';
+  $('#mistake-save').textContent = item ? '保存修改' : '归档';
+  if (item) {
+    $('#mistake-course').value = item.course || '';
+    $('#mistake-title').value = item.title || '';
+    $('#mistake-question').value = item.question || '';
+    $('#mistake-my').value = item.myAnswer || '';
+    $('#mistake-correct').value = item.correctAnswer || '';
+    $('#mistake-analysis').value = item.analysis || '';
+    $('#mistake-tags').value = (item.tags || []).join(',');
+  } else {
+    $('#mistake-course').value = App.mistakeFilter !== 'all' ? App.mistakeFilter : '';
+  }
+  $('#mistake-modal').hidden = false;
+  App.modalOpen = true;
+  setTimeout(() => $('#mistake-question').focus(), 80);
+}
+
+function closeMistakeModal() {
+  $('#mistake-modal').hidden = true;
+  App.modalOpen = false;
+}
+
+async function saveMistake(event) {
+  event.preventDefault();
+  const question = $('#mistake-question').value.trim();
+  if (!question) { toast('请填写题目。', 'error'); $('#mistake-question').focus(); return; }
+  const payload = {
+    course: $('#mistake-course').value.trim(),
+    title: $('#mistake-title').value.trim(),
+    question,
+    myAnswer: $('#mistake-my').value.trim(),
+    correctAnswer: $('#mistake-correct').value.trim(),
+    analysis: $('#mistake-analysis').value.trim(),
+    tags: $('#mistake-tags').value.split(/[,，\s]+/).map((t) => t.trim()).filter(Boolean),
+    source: 'manual'
+  };
+  const id = $('#mistake-id').value;
+  try {
+    if (id) await api.updateMistake(id, payload);
+    else await api.addMistake(payload);
+    closeMistakeModal();
+    await refreshState();
+    toast(id ? '错题已更新。' : '错题已归档。', 'success');
+  } catch (error) {
+    toast(`保存失败：${error.message || error}`, 'error');
+  }
+}
+
+async function deleteMistake(id) {
+  const ok = await confirmAction({
+    title: '删除这道错题？',
+    text: '删除后不再出现在错题本。',
+    okText: '删除', icon: 'i-trash'
+  });
+  if (!ok) return;
+  try {
+    await api.deleteMistake(id);
+    await refreshState();
+    toast('错题已删除。', 'success');
+  } catch (error) {
+    toast(`删除失败：${error.message || error}`, 'error');
+  }
+}
+
+async function extractMistakes() {
+  const button = $('#btn-extract-mistakes');
+  if (button) button.disabled = true;
+  toast('正在读取已批阅作业，可能需要十几秒…', 'info', 3600);
+  try {
+    const result = await api.extractMistakes();
+    await refreshState();
+    toast(result.message || '归档完成。', result.added ? 'success' : 'info', 5200);
+  } catch (error) {
+    toast(`归档失败：${error.message || error}`, 'error', 5200);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function setPage(page) {
   if (!page) return;
   if (page === 'logs') page = 'settings';
@@ -1308,6 +1768,22 @@ function bindEvents() {
         break;
       }
       case 'candidate-dismiss': dismissCandidate(id); break;
+      case 'toggle-notice': toggleNotice(id); break;
+      case 'read-notice': readNotice(id); break;
+      case 'delete-notice': deleteNotice(id); break;
+      case 'return-gear': returnGear(id); break;
+      case 'edit-gear': {
+        const item = (App.state.gear || []).find((g) => g.id === id);
+        if (item) openGearModal(item);
+        break;
+      }
+      case 'delete-gear': deleteGear(id); break;
+      case 'edit-mistake': {
+        const item = (App.state.mistakes || []).find((m) => m.id === id);
+        if (item) openMistakeModal(item);
+        break;
+      }
+      case 'delete-mistake': deleteMistake(id); break;
     }
   });
 
@@ -1370,6 +1846,32 @@ function bindEvents() {
   });
   $('#set-auto-sync-inline').addEventListener('change', (e) => updateSetting({ autoSync: e.target.checked }));
   $('#set-auto-add-inline').addEventListener('change', (e) => updateSetting({ autoAddFromChaoxing: e.target.checked }));
+
+  $('#btn-extract-notices').addEventListener('click', extractNotices);
+  $('#btn-add-notice').addEventListener('click', openNoticeModal);
+  $('#btn-read-all').addEventListener('click', readAllNotices);
+  $('#notice-form').addEventListener('submit', saveNotice);
+  $('#notice-modal-close').addEventListener('click', closeNoticeModal);
+  $('#notice-cancel').addEventListener('click', closeNoticeModal);
+  $('#notice-modal').addEventListener('click', (event) => { if (event.target === $('#notice-modal')) closeNoticeModal(); });
+
+  $('#btn-add-gear').addEventListener('click', () => openGearModal());
+  $('#btn-gear-check').addEventListener('click', gearCheck);
+  $('#gear-form').addEventListener('submit', saveGear);
+  $('#gear-modal-close').addEventListener('click', closeGearModal);
+  $('#gear-cancel').addEventListener('click', closeGearModal);
+  $('#gear-modal').addEventListener('click', (event) => { if (event.target === $('#gear-modal')) closeGearModal(); });
+
+  $('#btn-add-mistake').addEventListener('click', () => openMistakeModal());
+  $('#btn-extract-mistakes').addEventListener('click', extractMistakes);
+  $('#mistake-form').addEventListener('submit', saveMistake);
+  $('#mistake-modal-close').addEventListener('click', closeMistakeModal);
+  $('#mistake-cancel').addEventListener('click', closeMistakeModal);
+  $('#mistake-modal').addEventListener('click', (event) => { if (event.target === $('#mistake-modal')) closeMistakeModal(); });
+  $('#mistake-filter').addEventListener('change', (event) => {
+    App.mistakeFilter = event.target.value;
+    renderMistakes();
+  });
 
   $('#task-form').addEventListener('submit', saveTask);
   $('#task-no-deadline').addEventListener('change', (event) => {
@@ -1470,6 +1972,9 @@ function bindEvents() {
     if (event.key === 'Escape') {
       if (!$('#confirm-modal').hidden) { resolveConfirm(false); return; }
       if (!$('#privacy-modal').hidden) { closePrivacy(); return; }
+      if (!$('#notice-modal').hidden) { closeNoticeModal(); return; }
+      if (!$('#gear-modal').hidden) { closeGearModal(); return; }
+      if (!$('#mistake-modal').hidden) { closeMistakeModal(); return; }
       if (!$('#task-modal').hidden) { closeTaskModal(); return; }
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {

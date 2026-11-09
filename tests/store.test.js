@@ -132,3 +132,44 @@ test('does not add an already completed remote task', () => {
   assert.equal(store.stats().pending, 0);
 });
 
+
+/* ---------------------------------------------- notices / gear / mistakes */
+
+test('notices dedupe by sourceKey and track unread counts', () => {
+  const { store } = tempStore();
+  const first = store.addNotice({ title: '作业三已发布', sourceKey: 'cx:notice:1', source: 'chaoxing' });
+  assert.equal(first.created, true);
+  const again = store.addNotice({ title: '作业三已发布', sourceKey: 'cx:notice:1', source: 'chaoxing' });
+  assert.equal(again.created, false);
+  assert.equal(store.snapshot().notices.length, 1);
+  assert.equal(store.stats().noticesUnread, 1);
+  store.markAllNoticesRead();
+  assert.equal(store.stats().noticesUnread, 0);
+});
+
+test('gear tracks borrow, overdue and return states', () => {
+  const { store } = tempStore();
+  const item = store.addGear({ name: '数字示波器', borrower: '张三', dueAt: due(-2) });
+  assert.equal(item.status, 'out');
+  assert.equal(store.gearSummary().out, 1);
+  assert.equal(store.gearSummary().overdue, 1);
+  const returned = store.returnGear(item.id, { condition: '正常' });
+  assert.equal(returned.status, 'returned');
+  assert.equal(store.gearSummary().out, 0);
+  assert.equal(store.stats().gearOverdue, 0);
+});
+
+test('mistakes dedupe by sourceKey and summarize by course', () => {
+  const { store } = tempStore();
+  const payload = {
+    course: '工程数学', question: '下列哪个是质数', myAnswer: 'A', correctAnswer: 'C',
+    source: 'chaoxing', sourceKey: 'cx:mistake:1:0'
+  };
+  assert.equal(store.addMistake(payload).created, true);
+  assert.equal(store.addMistake(payload).created, false);
+  store.addMistake({ course: '大学英语', question: 'Unit 2 选词填空', source: 'manual' });
+  const summary = store.mistakeSummary();
+  assert.equal(summary.total, 2);
+  assert.equal(summary.courses.length, 2);
+  assert.equal(store.stats().mistakes, 2);
+});

@@ -24,4 +24,4 @@ try {
 } finally {
   Pop-Location
 }
-Write-Host "Installer: $root\dist\ClassBell-Setup-1.0.0.exe"
+Write-Host "Installer: $root\dist\ClassBell-Setup-1.0.1.exe"

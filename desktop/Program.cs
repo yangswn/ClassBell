@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -12,6 +13,14 @@ namespace ClassBell
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumProc callback, IntPtr lParam);
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int max);
+
+        private delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
 
         [STAThread]
         private static void Main(string[] args)
@@ -33,6 +42,30 @@ namespace ClassBell
 
         private static void BringExistingToFront()
         {
+            int current = Process.GetCurrentProcess().Id;
+            IntPtr fallback = IntPtr.Zero;
+            EnumWindows((hWnd, lParam) =>
+            {
+                uint pid;
+                GetWindowThreadProcessId(hWnd, out pid);
+                if (pid == current) return true;
+                var title = new StringBuilder(256);
+                GetWindowText(hWnd, title, title.Capacity);
+                if (title.ToString() == "课铃 ClassBell")
+                {
+                    fallback = hWnd;
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            if (fallback != IntPtr.Zero)
+            {
+                ShowWindow(fallback, 9);
+                SetForegroundWindow(fallback);
+                return;
+            }
+
             foreach (var process in Process.GetProcessesByName("ClassBell"))
             {
                 if (process.MainWindowHandle != IntPtr.Zero)

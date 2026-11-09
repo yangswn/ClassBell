@@ -118,8 +118,8 @@ namespace ClassBell
         {
             if (startHidden)
             {
-                ShowInTaskbar = false;
-                Hide();
+                ShowInTaskbar = true;
+                WindowState = FormWindowState.Minimized;
             }
             try
             {
@@ -537,7 +537,11 @@ namespace ClassBell
         private void HideToTray()
         {
             SaveWindowState();
-            Hide();
+            // Keep a taskbar button. Hiding the form completely made the app
+            // impossible to recover when Windows 11 chose not to show the
+            // notification icon in the overflow area.
+            ShowInTaskbar = true;
+            WindowState = FormWindowState.Minimized;
             if (firstHideBalloon && tray != null)
             {
                 firstHideBalloon = false;
@@ -603,9 +607,19 @@ namespace ClassBell
 
         private void CreateTray()
         {
-            Icon icon;
-            try { icon = new Icon(Path.Combine(appDir, "assets", "icon.ico")); }
-            catch { icon = SystemIcons.Application; }
+            Icon icon = null;
+            try
+            {
+                using (var source = new Icon(Path.Combine(appDir, "assets", "icon.ico")))
+                {
+                    icon = new Icon(source, 16, 16);
+                }
+            }
+            catch
+            {
+                try { icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+                catch { icon = SystemIcons.Application; }
+            }
             tray = new NotifyIcon();
             tray.Icon = icon;
             tray.Text = "课铃 ClassBell";

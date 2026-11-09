@@ -37,11 +37,11 @@ try {
 
 Push-Location $installer
 try {
-  & $csc /nologo /platform:x64 /target:winexe /out:"$dist\ClassBell-Setup-1.0.0.exe" /win32icon:"$root\build\icon.ico" `
+  & $csc /nologo /platform:x64 /target:winexe /out:"$dist\ClassBell-Setup-1.0.1.exe" /win32icon:"$root\build\icon.ico" `
     /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `
     /resource:"$zip",ClassBell.payload.zip /resource:"$root\LICENSE",ClassBell.LICENSE.txt `
     Setup.cs InstallerInfo.cs
   if ($LASTEXITCODE -ne 0) { throw "setup build failed" }
 } finally { Pop-Location }
 
-Write-Host "Installer: $dist\ClassBell-Setup-1.0.0.exe"
+Write-Host "Installer: $dist\ClassBell-Setup-1.0.1.exe"

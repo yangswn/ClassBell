@@ -52,7 +52,7 @@
       <div class="window-controls no-drag">
         <button class="win-btn" id="btn-min" title="最小化" aria-label="最小化"><svg><use href="#i-min"/></svg></button>
         <button class="win-btn" id="btn-max" title="最大化" aria-label="最大化"><svg><use href="#i-max"/></svg></button>
-        <button class="win-btn win-close" id="btn-close" title="关闭到托盘" aria-label="关闭"><svg><use href="#i-close"/></svg></button>
+        <button class="win-btn win-close" id="btn-close" title="最小化到任务栏" aria-label="关闭"><svg><use href="#i-close"/></svg></button>
       </div>
     </header>
 
@@ -78,7 +78,7 @@
         </div>
         <div class="sidebar-foot">
           <div class="foot-line"><span>数据仅保存在本机</span><svg><use href="#i-shield"/></svg></div>
-          <div class="foot-version" id="foot-version">v1.0.0</div>
+          <div class="foot-version" id="foot-version">v1.0.1</div>
         </div>
       </aside>
 
@@ -383,7 +383,7 @@
               <div class="panel settings-panel">
                 <div class="settings-title"><div><h2>运行与同步</h2><p>让提醒在后台可靠工作</p></div><svg><use href="#i-sync"/></svg></div>
                 <div class="switch-row"><div><strong>开机自动启动</strong><p>登录 Windows 后在后台启动，不打扰</p></div><label class="switch"><input type="checkbox" id="set-auto-launch" /><span></span></label></div>
-                <div class="switch-row"><div><strong>关闭窗口时最小化到托盘</strong><p>保证到期提醒不会因误关窗口而错过</p></div><label class="switch"><input type="checkbox" id="set-close-tray" /><span></span></label></div>
+                <div class="switch-row"><div><strong>关闭窗口时最小化到任务栏</strong><p>课铃继续运行，任务栏随时可以找回</p></div><label class="switch"><input type="checkbox" id="set-close-tray" /><span></span></label></div>
                 <div class="switch-row"><div><strong>自动同步学习通</strong><p>已登录时按间隔检查新作业</p></div><label class="switch"><input type="checkbox" id="set-auto-sync" /><span></span></label></div>
                 <div class="field-block inline-field">
                   <label class="field-label" for="set-sync-interval">同步间隔</label>
@@ -411,7 +411,7 @@
               </div>
 
               <div class="panel settings-panel about-panel">
-                <div class="about-brand"><img src="assets/icon.png" alt="" /><div><strong>课铃 ClassBell</strong><span id="about-version">v1.0.0</span></div></div>
+                <div class="about-brand"><img src="assets/icon.png" alt="" /><div><strong>课铃 ClassBell</strong><span id="about-version">v1.0.1</span></div></div>
                 <p>面向大学生的轻量课程任务提醒工具。非学习通官方产品，仅读取你本人有权访问的课程数据。</p>
                 <div class="about-links">
                   <button class="link-btn" id="btn-open-data-2"><svg><use href="#i-folder"/></svg>数据目录</button>

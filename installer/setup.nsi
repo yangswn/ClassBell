@@ -7,7 +7,7 @@ XPStyle on
 !include "FileFunc.nsh"
 
 !define PRODUCT_NAME "课铃 ClassBell"
-!define PRODUCT_VERSION "1.0.0"
+!define PRODUCT_VERSION "1.0.1"
 !define PRODUCT_PUBLISHER "ClassBell"
 !define PRODUCT_WEB_SITE "https://github.com/"
 !define APP_EXE "ClassBell.exe"
@@ -24,12 +24,12 @@ InstallDir "$LOCALAPPDATA\Programs\ClassBell"
 InstallDirRegKey HKCU "Software\ClassBell" "InstallDir"
 RequestExecutionLevel user
 BrandingText "课铃 ClassBell · 本地优先的课程提醒工具"
-VIProductVersion "1.0.0.0"
+VIProductVersion "1.0.1.0"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
 VIAddVersionKey "CompanyName" "${PRODUCT_PUBLISHER}"
 VIAddVersionKey "FileDescription" "课铃 ClassBell 安装程序"
-VIAddVersionKey "FileVersion" "1.0.0.0"
-VIAddVersionKey "ProductVersion" "1.0.0.0"
+VIAddVersionKey "FileVersion" "1.0.1.0"
+VIAddVersionKey "ProductVersion" "1.0.1.0"
 VIAddVersionKey "LegalCopyright" "Copyright (c) 2026 ClassBell"
 
 !insertmacro MUI_PAGE_WELCOME

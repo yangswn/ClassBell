@@ -258,6 +258,8 @@ async function boot() {
     App.meta = payload.meta;
     App.auth = payload.auth;
     App.logs = payload.logs;
+    mountLogsInSettings();
+    applySavedUiScale();
     applyMeta();
     renderAll();
     bindEvents();
@@ -275,11 +277,11 @@ async function boot() {
     }
     const params = new URLSearchParams(location.search);
     const initialPage = params.get('page');
-    if (['dashboard', 'tasks', 'integration', 'logs', 'settings'].includes(initialPage)) {
+    if (['dashboard', 'tasks', 'integration', 'settings'].includes(initialPage)) {
       setPage(initialPage);
     } else {
       const savedPage = localStorage.getItem('campus:lastPage');
-      if (['tasks', 'integration', 'logs', 'settings'].includes(savedPage)) setPage(savedPage);
+      if (['tasks', 'integration', 'settings'].includes(savedPage)) setPage(savedPage);
     }
     if (params.get('open') === 'task') {
       setTimeout(() => openTaskModal(), 360);
@@ -1129,8 +1131,32 @@ function resolveConfirm(value) {
 
 /* --------------------------------------------------------------- page nav */
 
+function mountLogsInSettings() {
+  const logsPage = $('#page-logs');
+  const settingsPage = $('#page-settings');
+  if (!logsPage || !settingsPage || logsPage.parentElement === settingsPage) return;
+  logsPage.classList.remove('page');
+  logsPage.classList.add('settings-log-section');
+  settingsPage.appendChild(logsPage);
+}
+
+function applySavedUiScale() {
+  let scale = Number(localStorage.getItem('campus:uiScale') || '1');
+  if (![0.9, 1, 1.08].includes(scale)) scale = 1;
+  document.documentElement.style.zoom = String(scale);
+  $$('#ui-scale .seg').forEach((btn) => btn.classList.toggle('active', Number(btn.dataset.scale) === scale));
+}
+
+function setUiScale(scale) {
+  const value = [0.9, 1, 1.08].includes(Number(scale)) ? Number(scale) : 1;
+  document.documentElement.style.zoom = String(value);
+  try { localStorage.setItem('campus:uiScale', String(value)); } catch (_) { /* ignore */ }
+  $$('#ui-scale .seg').forEach((btn) => btn.classList.toggle('active', Number(btn.dataset.scale) === value));
+}
+
 function setPage(page) {
   if (!page) return;
+  if (page === 'logs') page = 'settings';
   App.page = page;
   $$('.page').forEach((el) => el.classList.toggle('active', el.id === `page-${page}`));
   $$('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.page === page));
@@ -1150,9 +1176,19 @@ function setPage(page) {
 /* ----------------------------------------------------------------- events */
 
 function bindEvents() {
+  $('#btn-open-settings').addEventListener('click', () => setPage('settings'));
   $('#btn-min').addEventListener('click', () => api.windowAction('minimize'));
   $('#btn-max').addEventListener('click', () => api.windowAction('maximize'));
   $('#btn-close').addEventListener('click', () => api.windowAction('close'));
+  $$('#ui-scale .seg').forEach((btn) => btn.addEventListener('click', () => setUiScale(btn.dataset.scale)));
+  $('#btn-scroll-logs').addEventListener('click', () => {
+    const logs = $('#page-logs');
+    if (logs) logs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('#btn-quit-app').addEventListener('click', async () => {
+    if (!window.confirm('确定终止课铃？终止后提醒会停止，直到下次打开。')) return;
+    try { await api.quit(); } catch (_) { /* host exits */ }
+  });
   $('#titlebar').addEventListener('dblclick', (event) => {
     if (event.target.closest('button')) return;
     api.windowAction('maximize');

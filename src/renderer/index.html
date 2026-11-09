@@ -13,6 +13,7 @@
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m4 5.6 1.1 1.1L7 4.8M4 11.6l1.1 1.1L7 10.8M4 17.6l1.1 1.1L7 16.8"/></symbol>
     <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-13.7-5.3L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 13.7 5.3L20 16"/><path d="M20 20v-4h-4"/></symbol>
     <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.2-5 4.1 10 2.2-5H21"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h7M15 7h5M4 17h3M11 17h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
@@ -61,12 +62,12 @@
         <div class="sidebar-brand">
           <img src="assets/icon.png" alt="" />
           <div><strong>课铃</strong><span>CLASSBELL</span></div>
+          <button class="brand-settings" id="btn-open-settings" title="设置" aria-label="设置"><svg><use href="#i-sliders"/></svg></button>
         </div>
         <nav class="nav" aria-label="主导航">
           <button class="nav-item active" data-page="dashboard"><svg><use href="#i-grid"/></svg><span>今日概览</span><em class="nav-badge" id="nav-badge"></em></button>
           <button class="nav-item" data-page="tasks"><svg><use href="#i-list"/></svg><span>任务日程</span></button>
           <button class="nav-item" data-page="integration"><svg><use href="#i-sync"/></svg><span>学习通同步</span><i class="nav-dot" id="nav-cx-dot" hidden></i></button>
-          <button class="nav-item" data-page="logs"><svg><use href="#i-pulse"/></svg><span>运行日志</span></button>
           <button class="nav-item" data-page="settings"><svg><use href="#i-sliders"/></svg><span>偏好设置</span></button>
         </nav>
 
@@ -407,6 +408,7 @@
                 <div class="button-row">
                   <button class="btn btn-soft btn-small" id="btn-export-data"><svg><use href="#i-download"/></svg>导出数据</button>
                   <button class="btn btn-ghost btn-small" id="btn-import-data"><svg><use href="#i-upload"/></svg>导入数据</button>
+                  <button class="btn btn-ghost btn-small" id="btn-scroll-logs"><svg><use href="#i-pulse"/></svg>运行日志</button>
                 </div>
               </div>
 
@@ -418,6 +420,22 @@
                   <button class="link-btn" id="btn-about-privacy"><svg><use href="#i-shield"/></svg>隐私说明</button>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div class="panel settings-panel settings-wide">
+            <div class="settings-title"><div><h2>界面与退出</h2><p>调大一点看得清，或者彻底停掉课铃</p></div><svg><use href="#i-sliders"/></svg></div>
+            <div class="field-block inline-field">
+              <label class="field-label">界面大小</label>
+              <div class="segmented compact" id="ui-scale">
+                <button class="seg" data-scale="0.9">小</button>
+                <button class="seg active" data-scale="1">标准</button>
+                <button class="seg" data-scale="1.08">大</button>
+              </div>
+            </div>
+            <div class="danger-row">
+              <div><strong>终止运行</strong><p>立即关闭课铃和后台服务，之后不会再提醒，直到重新打开。</p></div>
+              <button class="btn btn-danger" id="btn-quit-app"><svg><use href="#i-power"/></svg>终止课铃</button>
             </div>
           </div>
         </section>

@@ -243,3 +243,48 @@ test('boolean settings are not flipped by the string "false"', () => {
   store.updateSettings({ sound: false });
   assert.equal(store.snapshot().settings.sound, false);
 });
+
+/* --------------------------------------------- 重复日程（学生评审反馈） */
+
+test('monthly recurrence keeps the anchor day instead of drifting to 28', () => {
+  const { nextOccurrence } = require('../server/store');
+  const anchor = { seriesStartAt: '2026-01-31T10:00:00.000Z', recurrenceDay: 31 };
+  let current = { id: 't', title: '月报', dueAt: '2026-01-31T10:00:00.000Z', recurrence: 'monthly', ...anchor };
+  const seen = [];
+  for (let i = 0; i < 4; i += 1) {
+    current = nextOccurrence(current, Date.parse('2026-01-01T00:00:00Z'));
+    seen.push(current.dueAt.slice(0, 10));
+  }
+  // 1/31 之后应回到 3/31、5/31，而不是永远 28 号
+  assert.deepEqual(seen, ['2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31']);
+});
+
+test('completing a long-overdue daily task schedules the next one in the future', () => {
+  const { store } = tempStore();
+  const task = store.addTask({
+    title: '每日打卡', dueAt: due(-6), recurrence: 'daily', reminderOffsets: [10]
+  });
+  const result = store.completeTask(task.id);
+  assert.ok(result.next, '应该生成下一期');
+  assert.ok(new Date(result.next.dueAt).getTime() > Date.now(), '下一期必须晚于现在');
+  assert.equal(result.next.status, 'pending');
+});
+
+test('completing an overdue weekly task also rolls into the future', () => {
+  const { store } = tempStore();
+  const task = store.addTask({
+    title: '每周复盘', dueAt: due(-21), recurrence: 'weekly', reminderOffsets: [10]
+  });
+  const result = store.completeTask(task.id);
+  assert.ok(result.next);
+  assert.ok(new Date(result.next.dueAt).getTime() > Date.now());
+});
+
+test('a fresh recurring task keeps its own day-of-month anchor', () => {
+  const { store } = tempStore();
+  const task = store.addTask({
+    title: '月末结算', dueAt: '2026-01-31T10:00:00.000Z', recurrence: 'monthly'
+  });
+  assert.equal(task.recurrenceDay, 31);
+  assert.equal(task.seriesStartAt, '2026-01-31T10:00:00.000Z');
+});

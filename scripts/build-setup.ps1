@@ -59,6 +59,10 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "payload zip failed" }
 } finally { Pop-Location }
 
+$webview2 = Join-Path $root "tools\MicrosoftEdgeWebview2Setup.exe"
+if (-not (Test-Path $webview2)) {
+  Write-Host "warning: WebView2 bootstrapper missing, installer will not carry it"
+}
 $setup = Join-Path $dist "ClassBell-Setup-$version.exe"
 if (Test-Path $setup) { Remove-Item $setup -Force }
 Push-Location $installer
@@ -66,6 +70,7 @@ try {
   & $csc /nologo /platform:x64 /target:winexe /out:"$setup" /win32icon:"$root\build\icon.ico" `
     /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `
     /resource:"$zip",ClassBell.payload.zip /resource:"$root\LICENSE",ClassBell.LICENSE.txt `
+    /resource:"$webview2",ClassBell.webview2 `
     Setup.cs InstallerInfo.cs
   if ($LASTEXITCODE -ne 0) { throw "setup build failed" }
 } finally { Pop-Location }

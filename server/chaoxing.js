@@ -69,6 +69,22 @@ class ChaoxingService {
     });
   }
 
+  /**
+   * Keep only the fields needed to re-inject the session into WebView2 after a
+   * restart. Chaoxing login cookies are session-scoped, so WebView2 drops them
+   * when the host exits; persisting them locally avoids a re-login every start.
+   */
+  exportCookies() {
+    return this.cookies
+      .filter((c) => c && c.name && c.value !== undefined && c.value !== '')
+      .map((c) => ({
+        name: String(c.name),
+        value: String(c.value),
+        domain: String(c.domain || '.chaoxing.com'),
+        path: String(c.path || '/')
+      }));
+  }
+
   getUid() {
     const find = (name) => this.cookies.find((c) => c && c.name === name);
     return (find('_uid') || find('UID') || find('puid') || {}).value || '';

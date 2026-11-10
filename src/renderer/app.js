@@ -1701,10 +1701,12 @@ async function scanCurrentWorkPage() {
       text: page.text || '',
       url: page.url || '',
       title: page.title || '',
+      frames: page.frames || 0,
+      readableFrames: page.readableFrames || 0,
       course: App.mistakeFilter !== 'all' ? App.mistakeFilter : ''
     });
     await refreshState();
-    toast(result.message || '扫描完成。', result.added ? 'success' : 'info', 5600);
+    toast(result.message || '扫描完成。', result.added ? 'success' : 'info', 7000);
   } catch (error) {
     toast(`扫描失败：${error.message || error}`, 'error', 5200);
   } finally {

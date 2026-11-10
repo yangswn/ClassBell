@@ -356,9 +356,23 @@ async function handleApi(req, res) {
   if (p === '/api/cx/cookies' && method === 'POST') {
     const body = await readJson(req);
     chaoxing.setCookies(body.cookies || []);
+    try {
+      fs.writeFileSync(path.join(dataDir, 'cx-cookies.json'), JSON.stringify(chaoxing.exportCookies()), 'utf8');
+    } catch (_) { /* persistence is best effort */ }
     const auth = await chaoxing.getAuthStatus();
     broadcastState();
     return json(res, 200, auth);
+  }
+  if (p === '/api/cx/cookies' && method === 'GET') {
+    if (chaoxing.exportCookies().length) return json(res, 200, { cookies: chaoxing.exportCookies() });
+    try {
+      const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'cx-cookies.json'), 'utf8'));
+      if (Array.isArray(saved) && saved.length) {
+        chaoxing.setCookies(saved);
+        return json(res, 200, { cookies: chaoxing.exportCookies() });
+      }
+    } catch (_) { /* nothing saved yet */ }
+    return json(res, 200, { cookies: [] });
   }
   if (p === '/api/cx/sync' && method === 'POST') {
     return json(res, 200, await runSync({ auto: false }));
@@ -555,6 +569,15 @@ async function handleApi(req, res) {
     const title = String(body.title || '');
     const course = String(body.course || '');
     const parsed = parseMistakeText(text, url);
+    const count = (re) => (text.match(re) || []).length;
+    const markers = {
+      my: count(/我的答案|我的作答|学生答案/g),
+      correct: count(/正确答案/g),
+      analysis: count(/答案解析|试题解析/g),
+      frames: Number(body.frames || 0),
+      readableFrames: Number(body.readableFrames || 0),
+      length: text.length
+    };
     const items = parsed.map((item, i) => ({
       ...item,
       course,
@@ -565,14 +588,19 @@ async function handleApi(req, res) {
       wrongAt: new Date().toISOString()
     }));
     const stats = store.addMistakes(items);
-    log('mistakes_imported', { meta: { found: parsed.length, added: stats.added } });
-    broadcastState();
-    return json(res, 200, {
-      ok: true, found: parsed.length, added: stats.added,
-      message: parsed.length
-        ? `从当前页面归档 ${stats.added} 道错题。`
-        : '当前页面没有识别到“我的答案 / 正确答案”，请确认已打开已批改的作业详情页。'
+    log('mistakes_import_text', {
+      meta: {
+        length: markers.length, frames: markers.frames, readable: markers.readableFrames,
+        my: markers.my, correct: markers.correct, found: parsed.length, added: stats.added
+      }
     });
+    broadcastState();
+    const message = parsed.length
+      ? `从当前页面归档 ${stats.added} 道错题。`
+      : (markers.my
+        ? '页面里出现了“我的答案”，但没有配对的正确答案，可能是主观题或页面还没批改完。'
+        : `当前页面没有“我的答案 / 正确答案”。已读取 ${markers.length} 字、${markers.frames} 个内嵌框（可读 ${markers.readableFrames} 个）。请确认打开的是已批改的作业详情页。`);
+    return json(res, 200, { ok: true, found: parsed.length, added: stats.added, markers, message });
   }
   if (p === '/api/mistakes/extract' && method === 'POST') {    const started = Date.now();
     try {

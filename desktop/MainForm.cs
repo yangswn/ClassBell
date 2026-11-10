@@ -286,6 +286,7 @@ namespace ClassBell
             try
             {
                 if (webView.CoreWebView2 == null) return;
+                int injected = await InjectPersistedCookiesAsync();
                 var cookies = await webView.CoreWebView2.CookieManager.GetCookiesAsync("https://i.chaoxing.com/");
                 bool hasUid = false;
                 var list = new List<Dictionary<string, string>>();
@@ -302,12 +303,52 @@ namespace ClassBell
                 }
                 if (!hasUid) return;
                 await HostApi.PostJsonAsync("/api/cx/cookies", new Dictionary<string, object> { { "cookies", list } });
-                SafeLog("restored persisted Chaoxing cookies: " + list.Count);
+                SafeLog("restored persisted Chaoxing cookies: " + list.Count + ", injected " + injected);
             }
             catch (Exception ex)
             {
                 SafeLog("restore cookies failed: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Chaoxing login cookies are session scoped, so WebView2 forgets them when
+        /// the host exits. The backend keeps a copy; put it back before the login
+        /// window opens so the user is not asked to log in again.
+        /// </summary>
+        private async Task<int> InjectPersistedCookiesAsync()
+        {
+            int injected = 0;
+            try
+            {
+                var payload = HostApi.ParseObject(await HostApi.GetJsonAsync("/api/cx/cookies"));
+                object raw;
+                if (payload == null || !payload.TryGetValue("cookies", out raw) || raw == null) return 0;
+                var items = raw as System.Collections.IEnumerable;
+                if (items == null) return 0;
+                foreach (var entry in items)
+                {
+                    var map = entry as Dictionary<string, object>;
+                    if (map == null) continue;
+                    string name = HostApi.Str(map, "name");
+                    string value = HostApi.Str(map, "value");
+                    string domain = HostApi.Str(map, "domain", ".chaoxing.com");
+                    string path = HostApi.Str(map, "path", "/");
+                    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(value)) continue;
+                    try
+                    {
+                        var cookie = webView.CoreWebView2.CookieManager.CreateCookie(name, value, domain, path);
+                        webView.CoreWebView2.CookieManager.AddOrUpdateCookie(cookie);
+                        injected++;
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                SafeLog("inject cookies failed: " + ex.Message);
+            }
+            return injected;
         }
 
         private async Task InitializeWebViewAsync()

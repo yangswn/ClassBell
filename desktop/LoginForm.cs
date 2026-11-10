@@ -86,7 +86,19 @@ namespace ClassBell
                 catch { }
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-                webView.CoreWebView2.NavigationCompleted += async (s, e) => await CheckCookiesAsync();
+                webView.CoreWebView2.NavigationCompleted += async (s, e) =>
+                {
+                    try
+                    {
+                        string current = webView.CoreWebView2.Source;
+                        if (!string.IsNullOrEmpty(current) && current.Contains("passport2.chaoxing.com"))
+                        {
+                            status.Text = "登录已过期或未登录，请在下方完成登录";
+                        }
+                    }
+                    catch { }
+                    await CheckCookiesAsync();
+                };
                 webView.CoreWebView2.NavigationStarting += (s, e) =>
                 {
                     if (e.Uri != null && e.Uri.Contains("passport2.chaoxing.com"))
@@ -96,7 +108,22 @@ namespace ClassBell
                     }
                     lastUrl = e.Uri;
                 };
-                webView.CoreWebView2.Navigate("https://passport2.chaoxing.com/login?fid=&newversion=true&refer=https%3A%2F%2Fi.chaoxing.com");
+                bool alreadyLoggedIn = false;
+                try
+                {
+                    var existing = await webView.CoreWebView2.CookieManager.GetCookiesAsync("https://i.chaoxing.com/");
+                    alreadyLoggedIn = existing.Any((c) => (c.Name == "_uid" || c.Name == "UID" || c.Name == "puid") && !string.IsNullOrEmpty(c.Value));
+                }
+                catch { }
+                if (alreadyLoggedIn)
+                {
+                    status.Text = "正在确认登录状态…";
+                    webView.CoreWebView2.Navigate("https://i.chaoxing.com/");
+                }
+                else
+                {
+                    webView.CoreWebView2.Navigate("https://passport2.chaoxing.com/login?fid=&newversion=true&refer=https%3A%2F%2Fi.chaoxing.com");
+                }
                 timer = new System.Windows.Forms.Timer { Interval = 2500 };
                 timer.Tick += async (s, e) => await CheckCookiesAsync();
                 timer.Start();
@@ -113,7 +140,24 @@ namespace ClassBell
             if (webView == null || webView.CoreWebView2 == null) return null;
             try
             {
-                const string script = "JSON.stringify({url: location.href, title: document.title, text: (document.body ? document.body.innerText : '').slice(0, 200000)})";
+                const string script =
+                    "(() => {" +
+                    "  const parts = [];" +
+                    "  try { if (document.body) parts.push(document.body.innerText); } catch (e) {}" +
+                    "  let frames = 0, readable = 0;" +
+                    "  try {" +
+                    "    document.querySelectorAll('iframe').forEach((f) => {" +
+                    "      frames++;" +
+                    "      try {" +
+                    "        const d = f.contentDocument;" +
+                    "        if (d && d.body) { readable++; parts.push(d.body.innerText); }" +
+                    "      } catch (e) {}" +
+                    "    });" +
+                    "  } catch (e) {}" +
+                    "  return JSON.stringify({url: location.href, title: document.title," +
+                    "    frames: frames, readableFrames: readable," +
+                    "    text: parts.join('\\n').slice(0, 200000)});" +
+                    "})()";
                 string quoted = await webView.CoreWebView2.ExecuteScriptAsync(script);
                 if (string.IsNullOrWhiteSpace(quoted)) return null;
                 // ExecuteScriptAsync returns a JSON string literal, so unwrap it once.

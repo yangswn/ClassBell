@@ -147,8 +147,15 @@
       if (logs.mirrorDir) return host('openPath', logs.mirrorDir);
       return '';
     },
-    copyLogs: () => { download('/api/logs/export'); return Promise.resolve({ copied: 1 }); },
-    exportData: () => { download('/api/data/export'); return Promise.resolve('download'); },
+        // 优先让宿主弹“另存为”并落盘；浏览器模式下退回普通下载。
+    copyLogs: async () => {
+      try { return await host('saveLogs'); }
+      catch (_) { download('/api/logs/export'); return { path: '', fallback: true }; }
+    },
+        exportData: async () => {
+      try { return await host('saveData'); }
+      catch (_) { download('/api/data/export'); return { path: '', fallback: true }; }
+    },
     importData: async () => {
       const text = await pickImportFile();
       return request('POST', '/api/data/import', JSON.parse(text));

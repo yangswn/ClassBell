@@ -7,6 +7,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -604,6 +605,14 @@ namespace ClassBell
                             }
                         }
                         break;
+                    // 导出走宿主保存对话框：WebView2 里的 <a download> 在部分机器上
+                    // 会被静默拦截，用户点了却什么都没发生。由 C# 落盘更可靠。
+                    case "saveLogs":
+                        Respond(id, true, await SaveExportAsync("/api/logs/export", "ClassBell-process_logs", ".jsonl", "日志文件 (*.jsonl)|*.jsonl"));
+                        break;
+                    case "saveData":
+                        Respond(id, true, await SaveExportAsync("/api/data/export", "ClassBell-backup", ".json", "备份文件 (*.json)|*.json"));
+                        break;
                     case "chooseFolder":
                         Respond(id, true, ChooseFolder());
                         break;
@@ -667,6 +676,48 @@ namespace ClassBell
             if (action == "minimize") WindowState = FormWindowState.Minimized;
             else if (action == "maximize") WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
             else if (action == "close") HideToTray();
+        }
+
+        /// <summary>
+        /// 从本地服务取一份导出内容，弹出“另存为”后写入磁盘。
+        /// 返回 { path, bytes }；用户取消时 path 为空。
+        /// </summary>
+        private async Task<Dictionary<string, object>> SaveExportAsync(string apiPath, string filePrefix, string extension, string filter)
+        {
+            string body;
+            try
+            {
+                body = await HostApi.GetTextAsync(apiPath);
+            }
+            catch (Exception ex)
+            {
+                SafeLog("export fetch failed: " + ex.Message);
+                throw new Exception("无法从本地服务获取导出内容：" + ex.Message);
+            }
+
+            string suggested = filePrefix + "-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + extension;
+            string target = null;
+            using (var dialog = new SaveFileDialog())
+            {
+                dialog.Title = "保存导出文件";
+                dialog.FileName = suggested;
+                dialog.Filter = filter + "|所有文件 (*.*)|*.*";
+                dialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                dialog.OverwritePrompt = true;
+                if (dialog.ShowDialog(this) == DialogResult.OK) target = dialog.FileName;
+            }
+            if (string.IsNullOrWhiteSpace(target))
+                return new Dictionary<string, object> { { "path", "" }, { "bytes", 0 } };
+
+            // 统一写 UTF-8 无 BOM，避免 Excel / Git 工具读出乱码
+            File.WriteAllText(target, body, new UTF8Encoding(false));
+            var info = new FileInfo(target);
+            SafeLog("export saved: " + info.Length + " bytes");
+            return new Dictionary<string, object>
+            {
+                { "path", target },
+                { "bytes", info.Length }
+            };
         }
 
         private string ChooseFolder()

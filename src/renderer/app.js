@@ -2034,8 +2034,14 @@ function bindEvents() {
     renderLogs();
   });
   $('#btn-export-logs').addEventListener('click', async () => {
-    const result = await api.copyLogs();
-    if (result) toast(`已导出 ${result.copied} 个日志文件。`, 'success');
+    try {
+      const result = await api.copyLogs();
+      if (result && result.path) toast('日志已保存到：' + result.path, 'success', 7000);
+      else if (result && result.fallback) toast('已开始下载日志文件。', 'success');
+      else toast('已取消保存。', 'info');
+    } catch (error) {
+      toast(`导出日志失败：${error.message || error}`, 'error', 6000);
+    }
   });
   $('#btn-choose-repo').addEventListener('click', chooseLogRepo);
   $('#btn-pick-repo').addEventListener('click', chooseLogRepo);
@@ -2048,8 +2054,14 @@ function bindEvents() {
   });
 
   $('#btn-export-data').addEventListener('click', async () => {
-    const file = await api.exportData();
-    if (file) toast('数据已导出。', 'success');
+    try {
+      const result = await api.exportData();
+      if (result && result.path) toast('数据已保存到：' + result.path, 'success', 7000);
+      else if (result && result.fallback) toast('已开始下载备份文件。', 'success');
+      else toast('已取消保存。', 'info');
+    } catch (error) {
+      toast(`导出数据失败：${error.message || error}`, 'error', 6000);
+    }
   });
   $('#btn-import-data').addEventListener('click', async () => {
     const result = await api.importData();

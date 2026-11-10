@@ -27,6 +27,18 @@ namespace ClassBell
             return text;
         }
 
+        /// <summary>
+        /// 读取任意文本响应（导出日志、导出备份这类非 JSON 接口）。
+        /// </summary>
+        public static async Task<string> GetTextAsync(string path)
+        {
+            var response = await Client.GetAsync(BaseUrl + path);
+            var text = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+                throw new Exception("HTTP " + (int)response.StatusCode + ": " + text);
+            return text;
+        }
+
         public static async Task<string> PostJsonAsync(string path, object payload)
         {
             var body = new StringContent(Json.Serialize(payload), Encoding.UTF8, "application/json");

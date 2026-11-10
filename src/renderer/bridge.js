@@ -176,6 +176,8 @@
     updateMistake: (id, patch) => request('PATCH', `/api/mistakes/${encodeURIComponent(id)}`, patch),
     deleteMistake: (id) => request('DELETE', `/api/mistakes/${encodeURIComponent(id)}`),
     extractMistakes: () => request('POST', '/api/mistakes/extract', {}),
+    scanLoginPage: () => host('scanLoginPage'),
+    importMistakesFromPage: (page) => request('POST', '/api/mistakes/import-text', page),
 
     testReminder: () => host('testReminder'),
     reminderAction: async (action, taskId, minutes, firedAt) => {

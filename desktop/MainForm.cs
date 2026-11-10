@@ -494,6 +494,32 @@ namespace ClassBell
                         Respond(id, true, null);
                         ShowLogin();
                         break;
+                    case "scanLoginPage":
+                        {
+                            if (loginForm == null || loginForm.IsDisposed)
+                            {
+                                ShowLogin();
+                                Respond(id, true, new Dictionary<string, object> { { "needLogin", true } });
+                                break;
+                            }
+                            var json = await loginForm.ReadPageTextAsync();
+                            if (string.IsNullOrWhiteSpace(json))
+                            {
+                                Respond(id, true, new Dictionary<string, object> { { "needLogin", true } });
+                                break;
+                            }
+                            try
+                            {
+                                var page = HostApi.ParseObject(json);
+                                page["needLogin"] = false;
+                                Respond(id, true, page);
+                            }
+                            catch
+                            {
+                                Respond(id, true, new Dictionary<string, object> { { "needLogin", true } });
+                            }
+                        }
+                        break;
                     case "chooseFolder":
                         Respond(id, true, ChooseFolder());
                         break;

@@ -1684,6 +1684,34 @@ async function deleteMistake(id) {
   }
 }
 
+async function scanCurrentWorkPage() {
+  const button = $('#btn-scan-mistakes');
+  if (button) button.disabled = true;
+  try {
+    const page = await api.scanLoginPage();
+    if (!page || page.needLogin) {
+      toast('请先在登录窗口打开“已批改”的作业详情页，再点一次扫描。', 'info', 5200);
+      return;
+    }
+    if (!/chaoxing\.com/i.test(page.url || '')) {
+      toast('登录窗口当前不是学习通页面，请先打开作业详情页。', 'info', 5200);
+      return;
+    }
+    const result = await api.importMistakesFromPage({
+      text: page.text || '',
+      url: page.url || '',
+      title: page.title || '',
+      course: App.mistakeFilter !== 'all' ? App.mistakeFilter : ''
+    });
+    await refreshState();
+    toast(result.message || '扫描完成。', result.added ? 'success' : 'info', 5600);
+  } catch (error) {
+    toast(`扫描失败：${error.message || error}`, 'error', 5200);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function extractMistakes() {
   const button = $('#btn-extract-mistakes');
   if (button) button.disabled = true;
@@ -1864,6 +1892,7 @@ function bindEvents() {
 
   $('#btn-add-mistake').addEventListener('click', () => openMistakeModal());
   $('#btn-extract-mistakes').addEventListener('click', extractMistakes);
+  $('#btn-scan-mistakes').addEventListener('click', scanCurrentWorkPage);
   $('#mistake-form').addEventListener('submit', saveMistake);
   $('#mistake-modal-close').addEventListener('click', closeMistakeModal);
   $('#mistake-cancel').addEventListener('click', closeMistakeModal);

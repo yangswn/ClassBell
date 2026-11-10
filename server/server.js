@@ -8,6 +8,7 @@ const { Store } = require('./store');
 const { Telemetry } = require('./telemetry');
 const { ReminderScheduler } = require('./scheduler');
 const { ChaoxingService, LOGIN_URL, HOME_URL, cleanError } = require('./chaoxing');
+const { parseMistakeText, hashKey } = require('./chaoxing-parser');
 
 function argValue(name, fallback = '') {
   const hit = process.argv.find((a) => a.startsWith(`${name}=`));
@@ -509,8 +510,71 @@ async function handleApi(req, res) {
     broadcastState();
     return json(res, 200, result.mistake);
   }
-  if (p === '/api/mistakes/extract' && method === 'POST') {
-    const started = Date.now();
+  if (p === '/api/mistakes/inspect' && method === 'POST') {
+    const body = await readJson(req);
+    const url = String(body.url || '');
+    if (!/^https:\/\/[a-z0-9.-]*chaoxing\.com\//i.test(url)) {
+      return json(res, 400, { ok: false, message: 'only chaoxing urls are allowed' });
+    }
+    try {
+      const page = await chaoxing._fetch(url, { timeout: 15000 });
+      const text = page.text || '';
+      const keyword = String(body.keyword || '').slice(0, 40);
+      let matches = [];
+      if (keyword) {
+        const re = new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        let hit;
+        while ((hit = re.exec(text)) && matches.length < 6) {
+          matches.push(text.slice(Math.max(0, hit.index - 120), hit.index + 180));
+        }
+      }
+      return json(res, 200, {
+        ok: true,
+        status: page.status,
+        finalUrl: page.url,
+        length: text.length,
+        matches,
+        markers: {
+          my: /我的答案|我的作答/.test(text),
+          correct: /正确答案/.test(text),
+          analysis: /答案解析|试题解析/.test(text),
+          reviewed: /已批阅|批阅完成|得分/.test(text),
+          iframe: /<iframe/i.test(text),
+          login: /passport|请先登录|用户登录/.test(text)
+        },
+        head: text.slice(0, 6000)
+      });
+    } catch (error) {
+      return json(res, 200, { ok: false, error: cleanError(error) });
+    }
+  }
+  if (p === '/api/mistakes/import-text' && method === 'POST') {
+    const body = await readJson(req);
+    const text = String(body.text || '').slice(0, 200000);
+    const url = String(body.url || '');
+    const title = String(body.title || '');
+    const course = String(body.course || '');
+    const parsed = parseMistakeText(text, url);
+    const items = parsed.map((item, i) => ({
+      ...item,
+      course,
+      title,
+      source: 'chaoxing',
+      sourceUrl: url,
+      sourceKey: `cx:mistake:${hashKey(`${url}|${i}|${item.question.slice(0, 60)}`)}`,
+      wrongAt: new Date().toISOString()
+    }));
+    const stats = store.addMistakes(items);
+    log('mistakes_imported', { meta: { found: parsed.length, added: stats.added } });
+    broadcastState();
+    return json(res, 200, {
+      ok: true, found: parsed.length, added: stats.added,
+      message: parsed.length
+        ? `从当前页面归档 ${stats.added} 道错题。`
+        : '当前页面没有识别到“我的答案 / 正确答案”，请确认已打开已批改的作业详情页。'
+    });
+  }
+  if (p === '/api/mistakes/extract' && method === 'POST') {    const started = Date.now();
     try {
       const result = await chaoxing.collectMistakes(store.state.tasks, { limit: 12 });
       const stats = store.addMistakes(result.mistakes || []);

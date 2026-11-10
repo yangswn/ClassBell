@@ -113,7 +113,7 @@ class ChaoxingService {
       const text = await res.text();
       if (!res.ok) throw new ChaoxingError(`HTTP_${res.status}`, `HTTP ${res.status}`);
       if (text.length > 8 * 1024 * 1024) throw new ChaoxingError('RESPONSE_TOO_LARGE', 'response too large');
-      return { status: res.status, text, contentType: res.headers.get('content-type') || '' };
+      return { status: res.status, text, url: res.url || url, contentType: res.headers.get('content-type') || '' };
     } finally {
       clearTimeout(timer);
     }
@@ -259,7 +259,7 @@ class ChaoxingService {
   async collectMistakes(tasks, { limit = 12 } = {}) {
     const started = Date.now();
     const targets = (Array.isArray(tasks) ? tasks : [])
-      .filter((t) => t && t.sourceUrl && (t.status === 'done' || t.status === 'missed'))
+      .filter((t) => t && t.sourceUrl)
       .slice(0, limit);
     if (!targets.length) return { ok: true, mistakes: [], checked: 0, found: 0 };
 
@@ -269,8 +269,22 @@ class ChaoxingService {
       while (index < targets.length) {
         const task = targets[index++];
         try {
-          const res = await this._fetch(task.sourceUrl, { timeout: 14000 });
-          const parsed = parseMistakeHtml(res.text, task.sourceUrl);
+          const page = await this._fetch(task.sourceUrl, { timeout: 14000 });
+          let html = page.text;
+          let parsed = parseMistakeHtml(html, task.sourceUrl);
+          if (!parsed.length) {
+            // The work list links to a wrapper page that JS-redirects to the real
+            // answer sheet; fetch that sheet directly instead.
+            const next = /\/work\/phone\/doHomeWork\?[^'"\s<]+/.exec(html);
+            if (next) {
+              const answerUrl = 'https://mooc1.chaoxing.com/mooc-ans' + next[0].replace(/&amp;/g, '&');
+              try {
+                const sheet = await this._fetch(answerUrl, { timeout: 14000 });
+                html = sheet.text;
+                parsed = parseMistakeHtml(html, answerUrl);
+              } catch (_) { /* keep empty */ }
+            }
+          }
           parsed.forEach((item, i) => {
             out.push({
               ...item,

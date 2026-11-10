@@ -108,6 +108,23 @@ namespace ClassBell
             }
         }
 
+        public async Task<string> ReadPageTextAsync()
+        {
+            if (webView == null || webView.CoreWebView2 == null) return null;
+            try
+            {
+                const string script = "JSON.stringify({url: location.href, title: document.title, text: (document.body ? document.body.innerText : '').slice(0, 200000)})";
+                string quoted = await webView.CoreWebView2.ExecuteScriptAsync(script);
+                if (string.IsNullOrWhiteSpace(quoted)) return null;
+                // ExecuteScriptAsync returns a JSON string literal, so unwrap it once.
+                return HostApi.Json.Deserialize<string>(quoted);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private async Task CheckCookiesAsync()
         {
             if (pushing || logged || webView.CoreWebView2 == null) return;

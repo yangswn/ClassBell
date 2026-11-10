@@ -444,7 +444,18 @@ function dedupeNotices(list) {
 }
 
 function parseMistakeHtml(html, base) {
-  const lines = htmlToLines(html);
+  return parseMistakeLines(htmlToLines(html), base);
+}
+
+function parseMistakeText(text, base) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return parseMistakeLines(lines, base);
+}
+
+function parseMistakeLines(lines, base) {
   const out = [];
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
@@ -512,5 +523,6 @@ module.exports = {
   htmlToLines,
   parseNoticeFeed,
   parseNoticeHtml,
-  parseMistakeHtml
+  parseMistakeHtml,
+  parseMistakeText
 };

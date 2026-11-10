@@ -566,8 +566,20 @@ async function handleApi(req, res) {
     const body = await readJson(req);
     const text = String(body.text || '').slice(0, 200000);
     const url = String(body.url || '');
-    const title = String(body.title || '');
-    const course = String(body.course || '');
+    let title = String(body.title || '');
+    let course = String(body.course || '');
+
+    // Fill the missing course/title from the URL and the already synced tasks,
+    // so an archived mistake never lands in "未分课程" when we can identify it.
+    const courseId = (/[?&]courseId=(\d+)/.exec(url) || [])[1] || '';
+    if (courseId) {
+      const matched = store.state.tasks.find((t) => t.sourceUrl && t.sourceUrl.indexOf('courseId=' + courseId) >= 0);
+      if (matched) {
+        if (!course && matched.course) course = matched.course;
+        if (!title || /学习通|作业详情|个人空间|课程/.test(title)) title = matched.title || title;
+      }
+    }
+    if (!title) title = '学习通作业';
     const parsed = parseMistakeText(text, url);
     const count = (re) => (text.match(re) || []).length;
     const markers = {
@@ -582,6 +594,9 @@ async function handleApi(req, res) {
       ...item,
       course,
       title,
+      analysis: item.analysis || (item.myAnswer
+        ? `我的答案“${item.myAnswer}”与正确答案“${item.correctAnswer || '未给出'}”不一致。`
+        : `未作答，正确答案为“${item.correctAnswer || '未给出'}”。`),
       source: 'chaoxing',
       sourceUrl: url,
       sourceKey: `cx:mistake:${hashKey(`${url}|${i}|${item.question.slice(0, 60)}`)}`,

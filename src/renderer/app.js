@@ -294,6 +294,8 @@ async function boot() {
     initWebview();
     loadLogs();
     startTicker();
+    syncAutoScanUi();
+    if (autoScanEnabled()) startAutoScan();
     setInterval(() => {
       if (App.page === 'integration') checkAuth(false);
     }, 6000);
@@ -814,7 +816,7 @@ function mistakeCardHTML(item) {
         <div class="answer-box wrong"><span>我的答案</span>${esc(item.myAnswer || '未记录')}</div>
         <div class="answer-box right"><span>正确答案</span>${esc(item.correctAnswer || '未记录')}</div>
       </div>
-      ${item.analysis ? `<div class="mistake-note">${esc(item.analysis)}</div>` : ''}
+      ${item.analysis ? `<div class="mistake-note"><strong>错题原因</strong>${esc(item.analysis)}</div>` : ''}
       ${item.tags && item.tags.length ? `<div class="mistake-tags">${item.tags.map((t) => `<span class="mistake-tag">${esc(t)}</span>`).join('')}</div>` : ''}
     </div>`;
 }
@@ -1703,7 +1705,7 @@ async function scanCurrentWorkPage() {
       title: page.title || '',
       frames: page.frames || 0,
       readableFrames: page.readableFrames || 0,
-      course: App.mistakeFilter !== 'all' ? App.mistakeFilter : ''
+      course: ''
     });
     await refreshState();
     toast(result.message || '扫描完成。', result.added ? 'success' : 'info', 7000);
@@ -1711,6 +1713,65 @@ async function scanCurrentWorkPage() {
     toast(`扫描失败：${error.message || error}`, 'error', 5200);
   } finally {
     if (button) button.disabled = false;
+  }
+}
+
+/* --------------------------------------------------------- auto scan loop */
+
+let autoScanTimer = null;
+let lastAutoScanUrl = '';
+
+function autoScanEnabled() {
+  try { return localStorage.getItem('campus:autoScanMistakes') === '1'; } catch (_) { return false; }
+}
+
+function syncAutoScanUi() {
+  const el = $('#auto-scan-mistakes');
+  if (el) el.checked = autoScanEnabled();
+}
+
+async function autoScanTick() {
+  try {
+    const page = await api.scanLoginPage();
+    if (!page || page.needLogin) return;
+    if (!/chaoxing\.com/i.test(page.url || '')) return;
+    if (page.url === lastAutoScanUrl) return;
+    lastAutoScanUrl = page.url;
+    if (!/我的答案|我的作答/.test(page.text || '')) return;
+    const result = await api.importMistakesFromPage({
+      text: page.text || '',
+      url: page.url || '',
+      title: page.title || '',
+      frames: page.frames || 0,
+      readableFrames: page.readableFrames || 0,
+      course: ''
+    });
+    if (result && result.added) {
+      await refreshState();
+      toast(`自动归档 ${result.added} 道错题。`, 'success', 4200);
+    }
+  } catch (_) { /* the login window may be closed */ }
+}
+
+function startAutoScan() {
+  if (autoScanTimer) clearInterval(autoScanTimer);
+  autoScanTimer = setInterval(autoScanTick, 6000);
+  autoScanTick();
+}
+
+function stopAutoScan() {
+  if (autoScanTimer) clearInterval(autoScanTimer);
+  autoScanTimer = null;
+}
+
+function setAutoScan(enabled) {
+  try { localStorage.setItem('campus:autoScanMistakes', enabled ? '1' : '0'); } catch (_) { /* ignore */ }
+  if (enabled) {
+    startAutoScan();
+    toast('已开启自动扫描：打开已批改的作业页后会自动归档。', 'info', 3800);
+  } else {
+    stopAutoScan();
+    toast('已关闭自动扫描。', 'info', 2600);
   }
 }
 
@@ -1895,6 +1956,7 @@ function bindEvents() {
   $('#btn-add-mistake').addEventListener('click', () => openMistakeModal());
   $('#btn-extract-mistakes').addEventListener('click', extractMistakes);
   $('#btn-scan-mistakes').addEventListener('click', scanCurrentWorkPage);
+  $('#auto-scan-mistakes').addEventListener('change', (event) => setAutoScan(event.target.checked));
   $('#mistake-form').addEventListener('submit', saveMistake);
   $('#mistake-modal-close').addEventListener('click', closeMistakeModal);
   $('#mistake-cancel').addEventListener('click', closeMistakeModal);

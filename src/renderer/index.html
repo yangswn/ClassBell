@@ -85,7 +85,7 @@
         <div class="sidebar-foot">
           <button class="side-quit" id="btn-quit-side" title="终止课铃并关闭后台服务"><svg><use href="#i-power"/></svg><span>终止课铃</span></button>
           <div class="foot-line"><span>数据仅保存在本机</span><svg><use href="#i-shield"/></svg></div>
-          <div class="foot-version" id="foot-version">v1.0.7</div>
+          <div class="foot-version" id="foot-version">v1.0.9</div>
         </div>
       </aside>
 
@@ -369,6 +369,21 @@
             </div>
           </div>
 
+          <div class="guide-card" id="mistake-guide">
+            <div class="guide-steps">
+              <strong>怎么归档错题</strong>
+              <ol>
+                <li>在学习通登录窗口打开“已批改”的作业详情页（能看到我的答案 / 正确答案）；</li>
+                <li>回到这里点“扫描当前作业页”，课程与作业名会自动从页面识别；</li>
+                <li>也可以开启自动扫描，之后每次打开批改页都会自动归档错题。</li>
+              </ol>
+            </div>
+            <label class="guide-switch">
+              <span>自动扫描</span>
+              <span class="switch"><input type="checkbox" id="auto-scan-mistakes" /><span></span></span>
+            </label>
+          </div>
+
           <div class="stats-row mini-stats">
             <div class="stat-card"><span class="stat-label">累计错题</span><strong id="mistake-total">0</strong><em>道</em></div>
             <div class="stat-card"><span class="stat-label">近 7 天</span><strong id="mistake-week">0</strong><em>道</em></div>
@@ -507,7 +522,7 @@
               </div>
 
               <div class="panel settings-panel about-panel">
-                <div class="about-brand"><img src="assets/icon.png" alt="" /><div><strong>课铃 ClassBell</strong><span id="about-version">v1.0.7</span></div></div>
+                <div class="about-brand"><img src="assets/icon.png" alt="" /><div><strong>课铃 ClassBell</strong><span id="about-version">v1.0.9</span></div></div>
                 <p>面向大学生的轻量课程任务提醒工具。非学习通官方产品，仅读取你本人有权访问的课程数据。</p>
                 <div class="about-links">
                   <button class="link-btn" id="btn-open-data-2"><svg><use href="#i-folder"/></svg>数据目录</button>

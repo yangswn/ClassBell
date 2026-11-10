@@ -324,6 +324,27 @@ class Store {
         try { return normalizeMistake(m, m); } catch (_) { return null; }
       }).filter(Boolean)
       : [];
+    // Repair records archived before the scanner learned to read the course from
+    // the work URL, and make sure every mistake carries a visible reason.
+    for (const mistake of mistakes) {
+      if (!mistake.course && mistake.sourceUrl) {
+        const courseId = (/[?&]courseId=(\d+)/.exec(mistake.sourceUrl) || [])[1];
+        if (courseId) {
+          const matched = tasks.find((t) => t.sourceUrl && t.sourceUrl.indexOf('courseId=' + courseId) >= 0);
+          if (matched) {
+            mistake.course = matched.course || mistake.course;
+            if (!mistake.title || /学习通|作业详情|个人空间/.test(mistake.title)) {
+              mistake.title = matched.title || mistake.title;
+            }
+          }
+        }
+      }
+      if (!mistake.analysis) {
+        mistake.analysis = mistake.myAnswer
+          ? `我的答案“${mistake.myAnswer}”与正确答案“${mistake.correctAnswer || '未给出'}”不一致。`
+          : `未作答，正确答案为“${mistake.correctAnswer || '未给出'}”。`;
+      }
+    }
     return {
       ...base,
       ...raw,

@@ -223,8 +223,14 @@ function normalizeTask(input, existing = null) {
     completedBy: cleanText(input.completedBy ?? base.completedBy, 20) || ''
   };
 
-  if (task.dueAt !== base.dueAt) task.remindersSent = [];
-  if (input.reminderOffsets) task.remindersSent = [];
+  if (task.dueAt !== base.dueAt) {
+    task.remindersSent = [];
+  } else if (input.reminderOffsets) {
+    // Keep the reminder keys that are still valid for the remaining offsets,
+    // otherwise editing a note re-arms every reminder that already fired.
+    const valid = new Set(task.reminderOffsets.map((o) => `o${o}@${task.dueAt}`));
+    task.remindersSent = (task.remindersSent || []).filter((k) => valid.has(k));
+  }
   return task;
 }
 
@@ -487,17 +493,19 @@ class Store {
         next[key] = Math.max(5, Math.min(240, safeInt(patch[key], 30)));
       } else if (key === 'quietHours') {
         const q = patch[key] || {};
+        const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
         next.quietHours = {
-          enabled: Boolean(q.enabled),
-          start: /^\d{2}:\d{2}$/.test(q.start) ? q.start : '23:00',
-          end: /^\d{2}:\d{2}$/.test(q.end) ? q.end : '07:00'
+          enabled: q.enabled === true || q.enabled === 'true',
+          start: TIME_RE.test(q.start || '') ? q.start : (next.quietHours.start || '23:00'),
+          end: TIME_RE.test(q.end || '') ? q.end : (next.quietHours.end || '07:00')
         };
       } else if (key === 'reminderOffsets') {
         next.reminderOffsets = normalizeOffsets(patch.reminderOffsets);
       } else if (key === 'logMirrorDir' || key === 'displayName') {
         next[key] = cleanText(patch[key], 500);
       } else {
-        next[key] = Boolean(patch[key]);
+        // "false" (string) used to sneak in as true; only accept real booleans.
+        next[key] = patch[key] === true || patch[key] === 'true';
       }
     }
     this.state.settings = next;
@@ -891,12 +899,20 @@ class Store {
         valid.push(normalizeTask(item, item));
       } catch (_) { /* skip */ }
     }
-    const existing = new Map(this.state.tasks.map((t) => [t.id, t]));
+    const knownKeys = new Set(this.state.tasks.map((t) => t.sourceKey).filter(Boolean));
+    const knownSignatures = new Set(this.state.tasks.map((t) => `${t.title}::${t.dueAt}`));
+    const stats = { imported: 0, skipped: 0 };
     for (const task of valid) {
-      if (existing.has(task.id)) task.id = uid('t_');
-      existing.set(task.id, task);
+      if (task.sourceKey && knownKeys.has(task.sourceKey)) { stats.skipped += 1; continue; }
+      const signature = `${task.title}::${task.dueAt}`;
+      if (knownSignatures.has(signature)) { stats.skipped += 1; continue; }
+      if (this.state.tasks.some((t) => t.id === task.id)) task.id = uid('t_');
+      this.state.tasks.push(task);
+      if (task.sourceKey) knownKeys.add(task.sourceKey);
+      knownSignatures.add(signature);
+      stats.imported += 1;
     }
-    this.state.tasks = [...existing.values()].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+    this.state.tasks.sort((a, b) => a.dueAt.localeCompare(b.dueAt));
     if (Array.isArray(parsed.gear)) {
       for (const item of parsed.gear.slice(0, MAX_GEAR)) {
         try { this.state.gear.push(normalizeGear(item)); } catch (_) { /* skip */ }
@@ -912,8 +928,12 @@ class Store {
         try { this.state.notices.push(normalizeNotice(item)); } catch (_) { /* skip */ }
       }
     }
+    // A backup carries settings; restoring them is what users expect.
+    if (parsed.settings && typeof parsed.settings === 'object') {
+      try { this.updateSettings(parsed.settings); } catch (_) { /* ignore bad settings */ }
+    }
     this.scheduleSave();
-    return { imported: valid.length, total: this.state.tasks.length };
+    return { imported: stats.imported, skipped: stats.skipped, total: this.state.tasks.length };
   }
 
   stats() {

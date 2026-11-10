@@ -173,3 +173,73 @@ test('mistakes dedupe by sourceKey and summarize by course', () => {
   assert.equal(summary.courses.length, 2);
   assert.equal(store.stats().mistakes, 2);
 });
+
+/* ------------------------------------------- report-driven regression tests */
+
+test('editing a task does not re-arm reminders that already fired', () => {
+  const { store } = tempStore();
+  const task = store.addTask({
+    title: '编辑不应重弹', dueAt: due(1), reminderOffsets: [60, 10], source: 'manual'
+  });
+  store.markRemindersSent(task.id, [`o60@${task.dueAt}`]);
+  const before = store.snapshot().tasks[0].remindersSent.length;
+  assert.equal(before, 1);
+  const updated = store.updateTask(task.id, {
+    title: '改个标题', notes: '只改了备注', reminderOffsets: [60, 10]
+  });
+  assert.equal(updated.remindersSent.length, 1);
+});
+
+test('changing the deadline still clears sent reminders', () => {
+  const { store } = tempStore();
+  const task = store.addTask({ title: '改截止时间', dueAt: due(1), reminderOffsets: [60] });
+  store.markRemindersSent(task.id, [`o60@${task.dueAt}`]);
+  const updated = store.updateTask(task.id, { dueAt: due(3) });
+  assert.equal(updated.remindersSent.length, 0);
+});
+
+test('importing the same backup twice does not duplicate tasks', () => {
+  const { store } = tempStore();
+  const backup = JSON.stringify({
+    app: 'ClassBell',
+    tasks: [
+      { title: '备份任务A', dueAt: due(2), sourceKey: 'cx:work:a' },
+      { title: '备份任务B', dueAt: due(3), sourceKey: 'cx:work:b' }
+    ],
+    settings: { sound: false, displayName: '备份用户' }
+  });
+  const first = store.importData(backup);
+  assert.equal(first.imported, 2);
+  const second = store.importData(backup);
+  assert.equal(second.imported, 0);
+  assert.equal(second.skipped, 2);
+  assert.equal(store.snapshot().tasks.length, 2);
+});
+
+test('importing a backup restores settings', () => {
+  const { store } = tempStore();
+  store.importData(JSON.stringify({
+    app: 'ClassBell',
+    tasks: [{ title: '任务X', dueAt: due(1) }],
+    settings: { sound: false, displayName: '备份用户' }
+  }));
+  assert.equal(store.snapshot().settings.sound, false);
+  assert.equal(store.snapshot().settings.displayName, '备份用户');
+});
+
+test('rejects out-of-range quiet hours and keeps the previous value', () => {
+  const { store } = tempStore();
+  const before = store.snapshot().settings.quietHours.start;
+  store.updateSettings({ quietHours: { enabled: true, start: '99:99', end: '25:61' } });
+  const after = store.snapshot().settings.quietHours;
+  assert.equal(after.start, before);
+  assert.equal(after.enabled, true);
+});
+
+test('boolean settings are not flipped by the string "false"', () => {
+  const { store } = tempStore();
+  store.updateSettings({ sound: 'false' });
+  assert.equal(store.snapshot().settings.sound, false);
+  store.updateSettings({ sound: false });
+  assert.equal(store.snapshot().settings.sound, false);
+});

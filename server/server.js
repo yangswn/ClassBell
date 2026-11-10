@@ -27,13 +27,14 @@ fs.mkdirSync(dataDir, { recursive: true });
 const store = new Store(dataDir);
 const telemetry = new Telemetry({
   dataDir,
-  mirrorDir: process.env.CAMPUSPULSE_LOG_MIRROR || store.state.settings.logMirrorDir,
+  mirrorDir: (process.env.CLASSBELL_LOG_MIRROR || process.env.CAMPUSPULSE_LOG_MIRROR) || store.state.settings.logMirrorDir,
   appVersion: packageJson.version
 });
 const chaoxing = new ChaoxingService({ telemetry });
 const clients = new Set();
 let syncPromise = null;
 let reminderQueue = [];
+let reminderDropped = 0;
 let snoozes = [];
 let autoSyncTimer = null;
 
@@ -112,6 +113,36 @@ async function readJson(req) {
   return JSON.parse(text);
 }
 
+/* Only the local host may talk to this service. Binding to 127.0.0.1 alone does
+   not stop DNS rebinding: a hostile page can resolve its own domain to loopback
+   and reach these APIs with a foreign Host header. */
+const ALLOWED_HOSTS = new Set([
+  `127.0.0.1:${port}`,
+  `localhost:${port}`,
+  `[::1]:${port}`
+]);
+
+function hostAllowed(req) {
+  const host = String(req.headers.host || '').toLowerCase();
+  if (!host) return false;
+  return ALLOWED_HOSTS.has(host);
+}
+
+/* Writes must come from our own page: JSON content type + same-origin fetch.
+   Browsers cannot set Sec-Fetch-Site from a cross-site page, and text/plain
+   simple requests skip preflight, so both are checked. */
+function crossSiteWrite(req) {
+  const method = req.method.toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false;
+  const site = String(req.headers['sec-fetch-site'] || '').toLowerCase();
+  if (site && site !== 'same-origin' && site !== 'none') return true;
+  const origin = String(req.headers.origin || '');
+  if (origin && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin)) return true;
+  const ct = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (ct && ct !== 'application/json') return true;
+  return false;
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -124,8 +155,25 @@ const MIME = {
 };
 
 function serveStatic(req, res) {
-  const parsed = new URL(req.url, 'http://127.0.0.1');
-  let urlPath = decodeURIComponent(parsed.pathname);
+  let parsed;
+  try { parsed = new URL(req.url, 'http://127.0.0.1'); }
+  catch (_) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Bad request');
+    return;
+  }
+  let urlPath;
+  try { urlPath = decodeURIComponent(parsed.pathname); }
+  catch (_) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Bad request');
+    return;
+  }
+  if (urlPath === '/favicon.ico') {
+    res.writeHead(302, { Location: '/assets/icon.png' });
+    res.end();
+    return;
+  }
   if (urlPath === '/') urlPath = '/index.html';
   const base = urlPath.startsWith('/assets/') ? assetsDir : rendererDir;
   const relative = urlPath.startsWith('/assets/') ? urlPath.slice('/assets/'.length) : urlPath.replace(/^\//, '');
@@ -223,7 +271,7 @@ const scheduler = new ReminderScheduler({
   telemetry,
   onFire: (payload) => {
     reminderQueue.push({ ...payload, queuedAt: Date.now() });
-    if (reminderQueue.length > 20) reminderQueue.shift();
+    if (reminderQueue.length > 20) { reminderQueue.shift(); reminderDropped += 1; }
   }
 });
 
@@ -235,6 +283,7 @@ function processSnoozes() {
     const task = store.state.tasks.find((t) => t.id === item.payload.taskId);
     if (!task || task.status !== 'pending') continue;
     reminderQueue.push({ ...item.payload, snoozed: true });
+    if (reminderQueue.length > 20) { reminderQueue.shift(); reminderDropped += 1; }
   }
 }
 
@@ -364,6 +413,10 @@ async function handleApi(req, res) {
     return json(res, 200, auth);
   }
   if (p === '/api/cx/cookies' && method === 'GET') {
+    const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
+    if (fetchSite === 'cross-site') {
+      return json(res, 403, { error: 'FORBIDDEN_ORIGIN', message: '跨站请求被拒绝' });
+    }
     if (chaoxing.exportCookies().length) return json(res, 200, { cookies: chaoxing.exportCookies() });
     try {
       const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'cx-cookies.json'), 'utf8'));
@@ -527,8 +580,13 @@ async function handleApi(req, res) {
   if (p === '/api/mistakes/inspect' && method === 'POST') {
     const body = await readJson(req);
     const url = String(body.url || '');
-    if (!/^https:\/\/[a-z0-9.-]*chaoxing\.com\//i.test(url)) {
-      return json(res, 400, { ok: false, message: 'only chaoxing urls are allowed' });
+    let target = null;
+    try { target = new URL(url); } catch (_) { target = null; }
+    const hostName = target ? target.hostname.toLowerCase() : '';
+    const chaoxingHost = hostName === 'chaoxing.com' || hostName.endsWith('.chaoxing.com');
+    if (!target || target.protocol !== 'https:' || target.username || target.password
+        || (target.port && target.port !== '443') || !chaoxingHost) {
+      return json(res, 400, { ok: false, error: 'INVALID_URL', message: '仅允许学习通域名' });
     }
     try {
       const page = await chaoxing._fetch(url, { timeout: 15000 });
@@ -656,6 +714,10 @@ async function handleApi(req, res) {
     scheduler.check();
     processSnoozes();
     const items = reminderQueue.splice(0, reminderQueue.length);
+    if (reminderDropped > 0) {
+      log('reminder_dropped', { meta: { count: reminderDropped } });
+      reminderDropped = 0;
+    }
     return json(res, 200, { items });
   }
   if (p === '/api/reminders/action' && method === 'POST') {
@@ -712,17 +774,39 @@ async function handleApi(req, res) {
 
 /* ------------------------------------------------------------------ start */
 
+const API_STATUS = {
+  TASK_NOT_FOUND: 404, NOTICE_NOT_FOUND: 404, GEAR_NOT_FOUND: 404, MISTAKE_NOT_FOUND: 404,
+  TASK_TITLE_REQUIRED: 422, TASK_DUE_INVALID: 422, MISTAKE_QUESTION_REQUIRED: 422,
+  GEAR_NAME_REQUIRED: 422, NOTICE_TITLE_REQUIRED: 422, IMPORT_INVALID_FORMAT: 422,
+  IMPORT_INVALID_JSON: 422, TASK_LIMIT_REACHED: 409
+};
+
 const server = http.createServer((req, res) => {
+  if (!hostAllowed(req)) {
+    if (req.url.startsWith('/api/') || req.url === '/events') {
+      return json(res, 403, { error: 'HOST_NOT_ALLOWED', message: '仅允许本机访问' });
+    }
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('仅允许本机访问');
+  }
+  if (crossSiteWrite(req)) {
+    return json(res, 403, { error: 'FORBIDDEN_ORIGIN', message: '跨站请求被拒绝' });
+  }
   if (req.url.startsWith('/api/') || req.url === '/events') {
     handleApi(req, res).catch((error) => {
-      const code = (error && error.code) || 'SERVER_ERROR';
+      const code = (error && error.code) || error.message || 'SERVER_ERROR';
       log('api_error', { ok: false, error, meta: { path: req.url.split('?')[0] } });
-      if (!res.headersSent) json(res, 400, { error: code, message: String((error && error.message) || error).slice(0, 200) });
-      else res.end();
+      if (!res.headersSent) {
+        json(res, API_STATUS[code] || 400, { error: code, message: String((error && error.message) || error).slice(0, 200) });
+      } else res.end();
     });
     return;
   }
-  serveStatic(req, res);
+  try { serveStatic(req, res); }
+  catch (error) {
+    if (!res.headersSent) json(res, 400, { error: 'BAD_REQUEST', message: '请求格式错误' });
+    else { try { res.end(); } catch (_) { /* ignore */ } }
+  }
 });
 
 server.listen(port, '127.0.0.1', () => {
@@ -737,7 +821,7 @@ server.listen(port, '127.0.0.1', () => {
     telemetry.log('heartbeat', {
       meta: { uptime_min: Math.round(process.uptime() / 60), pending: store.stats().pending }
     });
-  }, Number(process.env.CAMPUSPULSE_HEARTBEAT_MS) || 5 * 60000);
+  }, Number((process.env.CLASSBELL_HEARTBEAT_MS || process.env.CAMPUSPULSE_HEARTBEAT_MS)) || 5 * 60000);
   console.log(`ClassBell server listening on 127.0.0.1:${port}`);
 });
 
@@ -751,5 +835,13 @@ function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-process.on('uncaughtException', (error) => log('uncaught_exception', { ok: false, error }));
+process.on('uncaughtException', (error) => {
+  try { log('uncaught_exception', { ok: false, error }); } catch (_) { /* ignore */ }
+  try { store.flush(); } catch (_) { /* ignore */ }
+  try { telemetry.flush(); } catch (_) { /* ignore */ }
+  try { telemetry.writeIndex(); } catch (_) { /* ignore */ }
+  // Running on after an unhandled exception leaves the service in an unknown
+  // state; exit and let the host report it instead of serving bad data.
+  setTimeout(() => process.exit(1), 60);
+});
 process.on('unhandledRejection', (error) => log('unhandled_rejection', { ok: false, error }));

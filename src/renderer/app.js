@@ -1992,8 +1992,12 @@ function bindEvents() {
   $('#confirm-modal').addEventListener('click', (event) => { if (event.target === $('#confirm-modal')) resolveConfirm(false); });
 
   $('#btn-test-reminder').addEventListener('click', async () => {
-    await api.testReminder();
-    toast('测试弹窗已发送，看看右下角。', 'success');
+    try {
+      await api.testReminder();
+      toast('测试弹窗已发送，看看屏幕右下角。', 'success');
+    } catch (error) {
+      toast(`无法打开测试弹窗：${error.message || error}`, 'error', 5000);
+    }
   });
   $('#set-sound').addEventListener('change', (e) => updateSetting({ sound: e.target.checked }));
   $('#set-quiet').addEventListener('change', (e) => {
@@ -2202,5 +2206,13 @@ async function dismissCandidate(id) {
 }
 
 /* ------------------------------------------------------------------- start */
+
+// Any host() failure used to surface as an unhandled rejection with no UI
+// feedback; report it once instead of failing silently.
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event && event.reason;
+  const message = (reason && (reason.message || reason)) || '未知错误';
+  try { toast(`操作未完成：${message}`, 'error', 5000); } catch (_) { /* ignore */ }
+});
 
 document.addEventListener('DOMContentLoaded', boot);

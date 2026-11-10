@@ -448,7 +448,13 @@ function parseMistakeHtml(html, base) {
 }
 
 function parseMistakeText(text, base) {
-  const lines = String(text || '')
+  // Text copied from the review page often arrives as one long line. Break it
+  // on question numbers and answer labels before line-based parsing.
+  const expanded = String(text || '')
+    .replace(/\r/g, '\n')
+    .replace(/(?:^|\s)(\d{1,3}\s*[.、．)）]\s*[\(（]?\s*[单多判填]?)/g, '\n$1')
+    .replace(/(我的答案|我的作答|学生答案|正确答案|答案解析|试题解析|得分)\s*[:：]?/g, '\n$1：');
+  const lines = expanded
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
@@ -538,7 +544,10 @@ function parseMistakeLines(lines, base) {
       if (correctAnswer && analysis && !analysisOpen) break;
     }
 
-    if (!correctAnswer && !/错误|不正确|答错/.test(lines.slice(Math.max(0, i - 3), i + 3).join(' '))) continue;
+    const noAnswer = !myAnswer || /未作答|未答|^[（(]\s*[)）]$/.test(myAnswer);
+    const context = lines.slice(Math.max(0, i - 3), i + 3).join(' ');
+    if (!correctAnswer && !noAnswer && !/错误|不正确|答错/.test(context)) continue;
+    if (!correctAnswer && !noAnswer) continue;
     const normalize = (value) => String(value || '').replace(/\s+/g, '').toLowerCase();
     if (myAnswer && correctAnswer && normalize(myAnswer) === normalize(correctAnswer)) continue;
     out.push({

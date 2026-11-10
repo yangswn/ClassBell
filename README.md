@@ -22,7 +22,7 @@
 
 ## 安装
 
-安装包：`dist/ClassBell-Setup-1.0.9.exe`（约 32 MB，64 位 Windows 10/11）。
+安装包：`dist/ClassBell-Setup-1.0.10.exe`（约 32 MB，64 位 Windows 10/11）。
 
 1. 双击安装包，阅读并勾选许可协议，选择安装位置。
 2. 安装器会释放本地服务、WebView2 宿主与图标，创建开始菜单/桌面快捷方式。
@@ -97,13 +97,23 @@ Node 本地服务
 
 选择 WebView2 + 本地服务而不是 Electron，是因为安装包更小、无需管理员权限，并且能直接使用 Windows 自带的 WebView2 运行时。
 
+## 安全边界
+
+本地服务只监听 `127.0.0.1`，并在此基础上加了三层限制：
+
+- **Host 校验**：只接受 `127.0.0.1:<端口>` / `localhost:<端口>`，阻断 DNS rebinding 读取；
+- **同源写保护**：写请求必须是 `application/json`、同源 `Sec-Fetch-Site`，拒绝跨站 CSRF；
+- **Cookie 读取隔离**：`/api/cx/cookies` 拒绝跨站来源，学习通会话只在本机流转。
+
+`/api/mistakes/inspect` 只允许 `https` 且主机名严格等于 `chaoxing.com` 或其子域。
+
 ## 构建
 
 要求：Windows 10/11 x64、.NET Framework 4.8、Node.js 20+、PowerShell 5.1。
 
 ```powershell
 cd campus-pulse
-npm test                 # 23 项单元测试
+npm test                 # 37 项单元测试
 powershell -File scripts\build-desktop.ps1
 node scripts\package-native.js
 powershell -File scripts\build-setup.ps1
@@ -112,7 +122,7 @@ powershell -File scripts\build-setup.ps1
 产物：
 
 - `dist\ClassBell\`：免安装目录（可直接运行 `ClassBell.exe`）
-- `dist\ClassBell-Setup-1.0.9.exe`：安装包
+- `dist\ClassBell-Setup-1.0.10.exe`：安装包
 
 WebView2 SDK 已放在 `desktop/lib/`；Node 运行时从本机 `node.exe` 复制到 `runtime/node.exe`。
 
@@ -122,7 +132,7 @@ WebView2 SDK 已放在 `desktop/lib/`；Node 运行时从本机 `node.exe` 复�
 npm test
 ```
 
-当前结果：23 项单元测试全部通过；安装器静默安装/卸载、WebView2 主窗口、学习通登录页、任务新增/完成、提醒弹窗、日志页面均已实际运行验证。详见 [测试记录](docs/测试记录.md)。
+当前结果：37 项单元测试全部通过；安装器静默安装/卸载、WebView2 主窗口、学习通登录页、任务新增/完成、提醒弹窗、日志页面均已实际运行验证。详见 [测试记录](docs/测试记录.md)。
 
 ## 过程数据与 7 天日志
 

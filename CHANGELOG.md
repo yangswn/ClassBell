@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.10 — 2026-11-10
+
+外部测试报告（14 项缺陷）修复批次。
+
+### Security
+
+- Host 校验：只接受本机 Host，阻断 DNS rebinding 读取任务、设置与学习通 Cookie；
+- 写请求同源校验：拒绝 `text/plain` 跨站简单请求（CSRF）；
+- `/api/mistakes/inspect` 改用 URL 解析严格限定 `chaoxing.com` 及其子域，修复白名单绕过；
+- `/api/cx/cookies` 拒绝跨站来源读取；
+- 畸形 URL 不再让请求永久挂起；未捕获异常记录后退出，不再带坏状态继续服务。
+
+### Fixed
+
+- 编辑任务（含只改备注）不再让已弹过的提醒重弹；
+- 备份导入按 `sourceKey`/标题+截止时间去重，并恢复 `settings`；重复导入不再翻倍；
+- 静音时段拒绝 `99:99` 这类非法时间，布尔设置不再被字符串 `"false"` 误存为 `true`；
+- 「测试弹窗」失败会给出提示，并加 `unhandledrejection` 兜底；
+- 错题解析支持「未作答」与整行复制粘贴的紧凑文本；
+- 业务错误返回 404/422 等语义化状态码，不再一律 `SERVER_ERROR` 400。
+
+### Changed
+
+- 缺少 WebView2 运行时的电脑不再直接报错退出：自动用默认浏览器打开课铃，并说明如何安装运行时；
+- 安装目录内附带 `tests/`，`npm test` 在安装副本里也能跑；
+- 环境变量新增 `CLASSBELL_LOG_MIRROR` / `CLASSBELL_HEARTBEAT_MS`，旧名继续兼容。
+
+
 > 版本规则：每次对外发布都递增版本号（`package.json` 的 `version`），构建脚本会自动同步程序集版本、安装器版本、安装包文件名和界面版本号。
 
 ## 1.0.9 — 2026-11-10

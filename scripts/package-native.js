@@ -47,15 +47,35 @@ copy(nodeExe, path.join(outDir, 'runtime', 'node.exe'));
 const nodeLicense = path.join(path.dirname(nodeExe), 'LICENSE');
 if (fs.existsSync(nodeLicense)) copy(nodeLicense, path.join(outDir, 'runtime', 'LICENSE-node.txt'));
 
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) copyDir(from, to);
+    else fs.copyFileSync(from, to);
+  }
+}
+
 const pkg = {
   name: 'classbell',
   productName: 'ClassBell',
   version: require(path.join(root, 'package.json')).version,
   description: '课铃 ClassBell - 课程作业自动识别与到期提醒工具',
   main: 'server/server.js',
-  license: 'MIT'
+  license: 'MIT',
+  scripts: {
+    start: 'node server/server.js --port=48765',
+    test: 'node tests/run-all.js'
+  }
 };
 fs.writeFileSync(path.join(outDir, 'package.json'), JSON.stringify(pkg, null, 2), 'utf8');
+// Ship the tests too, so `npm test` works from an installed copy instead of
+// only from the development checkout.
+if (fs.existsSync(path.join(root, 'tests'))) {
+  copyDir(path.join(root, 'tests'), path.join(outDir, 'tests'));
+}
+
 for (const name of ['README.md', 'LICENSE']) {
   const src = path.join(root, name);
   if (fs.existsSync(src)) copy(src, path.join(outDir, name));

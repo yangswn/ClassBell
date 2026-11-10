@@ -86,6 +86,18 @@ namespace ClassBell
                 catch { }
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+                // Chaoxing opens course/work pages with window.open / target=_blank.
+                // Keep those navigations inside this window so "扫描当前作业页"
+                // can actually read the page the user is looking at.
+                webView.CoreWebView2.NewWindowRequested += (s, e) =>
+                {
+                    try
+                    {
+                        e.Handled = true;
+                        if (!string.IsNullOrWhiteSpace(e.Uri)) webView.CoreWebView2.Navigate(e.Uri);
+                    }
+                    catch { }
+                };
                 webView.CoreWebView2.NavigationCompleted += async (s, e) =>
                 {
                     try

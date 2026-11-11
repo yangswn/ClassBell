@@ -1849,6 +1849,10 @@ function bindEvents() {
     $('#scale-guide-hint').textContent = `当前 ${note.label} · ${note.note}`;
   });
   $('#scale-guide-done').addEventListener('click', closeScaleGuide);
+  // 设置页里的“重新查看字号引导”：只重开弹窗，不动任何本地文件
+  $('#btn-reopen-scale-guide').addEventListener('click', () => {
+    openScaleGuide();
+  });
   $('#btn-min').addEventListener('click', () => api.windowAction('minimize'));
   $('#btn-max').addEventListener('click', () => api.windowAction('maximize'));
   $('#btn-close').addEventListener('click', () => api.windowAction('close'));

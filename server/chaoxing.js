@@ -343,7 +343,14 @@ class ChaoxingService {
       tasks = await this.fetchTaskFeed(auth.uid);
     } catch (error) {
       warning = cleanError(error).code;
-      this.telemetry.log('task_feed_error', { ok: false, error, meta: { fallback: true } });
+      // 主接口（gas/taskmsg）在部分账号上固定返回 403，这是平台限制而不是故障；
+      // 后面的课程列表/H5 兜底会正常工作，所以把这条记为“已恢复”，
+      // 避免日志页把每次同步都渲染成红色异常。
+      this.telemetry.log('task_feed_error', {
+        ok: false,
+        error,
+        meta: { fallback: true, recovered: true }
+      });
     }
 
     try {

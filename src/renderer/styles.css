@@ -951,3 +951,12 @@ kbd { display: inline-block; padding: 1px 5px; border: 1px solid #d8d2c4; border
 @media (max-width: 1120px) { .guide-card { flex-direction: column; } }
 
 .mistake-note strong { display: block; font-size: 10px; color: var(--muted-2); margin-bottom: 3px; font-weight: 600; letter-spacing: .4px; }
+
+/* 首次使用：界面大小引导 */
+.scale-guide-body { padding: 4px 2px 0; }
+.scale-guide-tip { margin: 0 0 14px; font-size: 12px; line-height: 1.7; color: var(--ink-soft); }
+.scale-guide-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.scale-guide-options .seg { min-width: 66px; padding: 9px 12px; font-size: 12px; }
+.scale-guide-demo { margin-top: 16px; padding: 12px 14px; border: 1px dashed #ddd6c5; border-radius: 10px; background: #fbf8ef; }
+.scale-guide-demo strong { display: block; font-size: 13px; color: var(--ink); }
+.scale-guide-demo span { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }

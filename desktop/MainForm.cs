@@ -62,14 +62,16 @@ namespace ClassBell
         private const int WmHotKey = 0x0312;
         private bool hotKeyRegistered;
 
+        /// <summary>
+        /// 注意：这里故意 **不** 再按 DPI 缩放。
+        /// WebView2 已经跟随系统 DPI 渲染（150% 时自动放大），
+        /// 之前又乘了 96/dpi 做一次补偿，等于把页面缩回去，
+        /// 小数缩放会把文字渲染发虚 —— 这就是用户反馈“页面很糊”的原因。
+        /// 字号大小交给用户在“界面大小”里选择。
+        /// </summary>
         private void ApplyDpiZoom()
         {
-            try
-            {
-                uint dpi = GetDpiForWindow(webView.Handle);
-                if (dpi >= 96) webView.ZoomFactor = Math.Max(0.5, 96.0 / dpi);
-            }
-            catch { }
+            if (webView != null) webView.ZoomFactor = 1.0;
         }
 
         public MainForm(bool hidden)

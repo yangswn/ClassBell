@@ -78,12 +78,8 @@ namespace ClassBell
                     env = await CoreWebView2Environment.CreateAsync(null, System.IO.Path.Combine(dataDir, "WebView2"), null);
                 }
                 await webView.EnsureCoreWebView2Async(env);
-                try
-                {
-                    uint dpi = GetDpiForWindow(webView.Handle);
-                    if (dpi >= 96) webView.ZoomFactor = Math.Max(0.5, 96.0 / dpi);
-                }
-                catch { }
+                // 不再按 DPI 二次缩放，避免文字发虚（WebView2 已跟随系统 DPI）
+                webView.ZoomFactor = 1.0;
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 // Chaoxing opens course/work pages with window.open / target=_blank.

@@ -56,7 +56,7 @@ const EVENT_LABEL = {
   sync_merge: '合并识别结果',
   deadline_enrichment: '补全截止时间',
   sync_failed: '同步失败',
-  task_feed_error: '作业接口异常',
+  task_feed_error: '主接口 403（已用备用读取）',
   course_list_error: '课程列表异常',
   course_tasks_error: '课程任务异常',
   task_feed_error_waf: '接口验证拦截',
@@ -316,6 +316,8 @@ async function boot() {
     if (params.get('open') === 'task') {
       setTimeout(() => openTaskModal(), 360);
     }
+    // 第一次打开先引导调字号：默认 100% 渲染最清晰，用户可当场放大
+    if (scaleGuidePending()) setTimeout(openScaleGuide, 320);
     document.body.classList.remove('boot-hidden');
   } catch (error) {
     console.error(error);
@@ -1388,6 +1390,32 @@ function applyUiScale(scale) {
   if (hint && note) hint.textContent = `当前 ${note.label} · ${note.note}`;
 }
 
+/** 首次使用引导：把“界面大小”摆在第一屏，避免用户以为页面糊或字太小。 */
+function scaleGuidePending() {
+  try { return localStorage.getItem('campus:scaleGuideDone') !== '1'; } catch (_) { return false; }
+}
+
+function openScaleGuide() {
+  const box = $('#scale-guide-options');
+  if (!box) return;
+  // 引导的每一步都不应阻塞弹窗显示：先显示，再填充内容。
+  $('#scale-guide-modal').hidden = false;
+  App.modalOpen = true;
+  box.innerHTML = UI_SCALES
+    .map((item) => `<button class="seg" data-scale="${item.value}">${item.label}</button>`)
+    .join('');
+  const current = currentUiScale();
+  $$("#scale-guide-options .seg").forEach((btn) => btn.classList.toggle("active", Number(btn.dataset.scale) === current));
+  const picked = UI_SCALES.find((i) => i.value === current) || UI_SCALES[1];
+  $('#scale-guide-hint').textContent = `当前 ${picked.label} · ${picked.note}`;
+}
+
+function closeScaleGuide() {
+  $('#scale-guide-modal').hidden = true;
+  App.modalOpen = false;
+  try { localStorage.setItem('campus:scaleGuideDone', '1'); } catch (_) { /* ignore */ }
+}
+
 function setUiScale(scale) {
   const value = UI_SCALES.some((item) => item.value === Number(scale)) ? Number(scale) : DEFAULT_UI_SCALE;
   applyUiScale(value);
@@ -1813,6 +1841,14 @@ function setPage(page) {
 
 function bindEvents() {
   $('#btn-open-settings').addEventListener('click', () => setPage('settings'));
+  $('#scale-guide-options').addEventListener('click', (event) => {
+    const btn = event.target.closest('.seg');
+    if (!btn) return;
+    setUiScale(btn.dataset.scale);
+    const note = UI_SCALES.find((i) => i.value === Number(btn.dataset.scale));
+    $('#scale-guide-hint').textContent = `当前 ${note.label} · ${note.note}`;
+  });
+  $('#scale-guide-done').addEventListener('click', closeScaleGuide);
   $('#btn-min').addEventListener('click', () => api.windowAction('minimize'));
   $('#btn-max').addEventListener('click', () => api.windowAction('maximize'));
   $('#btn-close').addEventListener('click', () => api.windowAction('close'));
@@ -2081,6 +2117,7 @@ function bindEvents() {
     if (event.key === 'Escape') {
       if (!$('#confirm-modal').hidden) { resolveConfirm(false); return; }
       if (!$('#privacy-modal').hidden) { closePrivacy(); return; }
+      if (!$('#scale-guide-modal').hidden) { closeScaleGuide(); return; }
       if (!$('#notice-modal').hidden) { closeNoticeModal(); return; }
       if (!$('#gear-modal').hidden) { closeGearModal(); return; }
       if (!$('#mistake-modal').hidden) { closeMistakeModal(); return; }

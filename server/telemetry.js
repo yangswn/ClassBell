@@ -183,7 +183,9 @@ class Telemetry {
       const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
       const key = dayKey(d);
       const entries = this._readFile(this._file(key));
-      const errors = entries.filter((e) => e.ok === false).length;
+      // 只统计“尚未恢复”的错误：像 learn 主接口 403 但备用通道成功的情况，
+      // 对用户没有影响，不该出现在错误计数里（否则每天都是 8 条红字）。
+      const errors = entries.filter((e) => e.ok === false && !(e.meta && e.meta.recovered)).length;
       const heartbeats = entries.filter((e) => e.event === 'heartbeat').length;
       const actions = entries.filter((e) => !['heartbeat', 'app_start', 'app_stop'].includes(e.event));
       const duration = entries.reduce((sum, e) => sum + (Number(e.duration_ms) || 0), 0);

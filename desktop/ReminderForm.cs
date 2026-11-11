@@ -86,12 +86,8 @@ namespace ClassBell
                         null);
                 }
                 await webView.EnsureCoreWebView2Async(env);
-                try
-                {
-                    uint dpi = GetDpiForWindow(webView.Handle);
-                    if (dpi >= 96) webView.ZoomFactor = Math.Max(0.5, 96.0 / dpi);
-                }
-                catch { }
+                // 不再按 DPI 二次缩放，避免文字发虚（WebView2 已跟随系统 DPI）
+                webView.ZoomFactor = 1.0;
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 webView.CoreWebView2.WebMessageReceived += OnWebMessage;

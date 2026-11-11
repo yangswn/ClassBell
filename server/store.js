@@ -58,7 +58,12 @@ function defaultSettings() {
     quietHours: { enabled: false, start: '23:00', end: '07:00' },
     logMirrorDir: '',
     displayName: '',
-    firstRun: true
+    firstRun: true,
+    // 界面偏好存这里而不是 localStorage：本地服务端口每次启动都变，
+    // localStorage 按源隔离会“丢”，导致字号引导每次启动都弹。
+    uiScale: 1.1,
+    scaleGuideDone: false,
+    lastPage: 'dashboard'
   };
 }
 
@@ -546,7 +551,8 @@ class Store {
     const allowed = [
       'autoLaunch', 'closeToTray', 'autoSync', 'autoSyncIntervalMin',
       'autoAddFromChaoxing', 'sound', 'quietHours', 'logMirrorDir',
-      'displayName', 'firstRun', 'reminderOffsets'
+      'displayName', 'firstRun', 'reminderOffsets',
+      'uiScale', 'scaleGuideDone', 'lastPage'
     ];
     const next = { ...this.state.settings };
     for (const key of allowed) {
@@ -563,6 +569,15 @@ class Store {
         };
       } else if (key === 'reminderOffsets') {
         next.reminderOffsets = normalizeOffsets(patch.reminderOffsets);
+      } else if (key === 'uiScale') {
+        // 只接受界面里提供的 6 档，避免脏值把页面缩坏
+        const allowedScales = [0.9, 1, 1.1, 1.25, 1.4, 1.6];
+        const value = Number(patch.uiScale);
+        next.uiScale = allowedScales.includes(value) ? value : (next.uiScale || 1.1);
+      } else if (key === 'lastPage') {
+        const allowedPages = ['dashboard', 'tasks', 'integration', 'notices', 'gear', 'mistakes', 'settings'];
+        const value = cleanText(patch.lastPage, 20);
+        next.lastPage = allowedPages.includes(value) ? value : (next.lastPage || 'dashboard');
       } else if (key === 'logMirrorDir' || key === 'displayName') {
         next[key] = cleanText(patch[key], 500);
       } else {

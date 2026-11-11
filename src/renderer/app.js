@@ -310,7 +310,8 @@ async function boot() {
     if (['dashboard', 'tasks', 'integration', 'notices', 'gear', 'mistakes', 'settings'].includes(initialPage)) {
       setPage(initialPage);
     } else {
-      const savedPage = localStorage.getItem('campus:lastPage');
+      const serverPage = App.state.settings && App.state.settings.lastPage;
+      const savedPage = serverPage || localStorage.getItem('campus:lastPage');
       if (['tasks', 'integration', 'notices', 'gear', 'mistakes', 'settings'].includes(savedPage)) setPage(savedPage);
     }
     if (params.get('open') === 'task') {
@@ -1373,7 +1374,12 @@ function buildUiScaleOptions() {
 }
 
 function currentUiScale() {
-  const raw = Number(localStorage.getItem('campus:uiScale') || DEFAULT_UI_SCALE);
+  // 服务端 settings 是唯一可信来源（端口无关）；
+  // localStorage 仅在旧版本迁移时作为回退。
+  const fromServer = App.state && App.state.settings ? Number(App.state.settings.uiScale) : NaN;
+  const raw = Number.isFinite(fromServer) && fromServer > 0
+    ? fromServer
+    : Number(localStorage.getItem('campus:uiScale') || DEFAULT_UI_SCALE);
   return UI_SCALES.some((item) => item.value === raw) ? raw : DEFAULT_UI_SCALE;
 }
 
@@ -1404,7 +1410,10 @@ function applyUiScale(scale) {
 
 /** 首次使用引导：把“界面大小”摆在第一屏，避免用户以为页面糊或字太小。 */
 function scaleGuidePending() {
-  try { return localStorage.getItem('campus:scaleGuideDone') !== '1'; } catch (_) { return false; }
+  // 注意：不要只依赖 localStorage —— 本地服务端口每次启动都变，源一变存储就丢。
+  const fromServer = App.state && App.state.settings ? App.state.settings.scaleGuideDone : false;
+  if (fromServer) return false;
+  try { return localStorage.getItem('campus:scaleGuideDone') !== '1'; } catch (_) { return true; }
 }
 
 function openScaleGuide() {
@@ -1426,12 +1435,17 @@ function closeScaleGuide() {
   $('#scale-guide-modal').hidden = true;
   App.modalOpen = false;
   try { localStorage.setItem('campus:scaleGuideDone', '1'); } catch (_) { /* ignore */ }
+  if (App.state && App.state.settings) App.state.settings.scaleGuideDone = true;
+  api.updateSettings({ scaleGuideDone: true }).catch(() => { /* 离线时忽略 */ });
 }
 
 function setUiScale(scale) {
   const value = UI_SCALES.some((item) => item.value === Number(scale)) ? Number(scale) : DEFAULT_UI_SCALE;
   applyUiScale(value);
+  // 双写：服务端保证重启后仍生效；localStorage 只作即时缓存
   try { localStorage.setItem('campus:uiScale', String(value)); } catch (_) { /* ignore */ }
+  if (App.state && App.state.settings) App.state.settings.uiScale = value;
+  api.updateSettings({ uiScale: value }).catch(() => { /* 离线时忽略 */ });
 }
 
 function stepUiScale(direction) {
@@ -1845,6 +1859,8 @@ function setPage(page) {
   if (App.lastPageView !== page) {
     App.lastPageView = page;
     try { localStorage.setItem('campus:lastPage', page); } catch (_) { /* ignore */ }
+    if (App.state && App.state.settings) App.state.settings.lastPage = page;
+    api.updateSettings({ lastPage: page }).catch(() => { /* ignore */ });
     api.pageView(page).catch(() => {});
   }
 }

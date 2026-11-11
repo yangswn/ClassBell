@@ -5,6 +5,15 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
+// 这些事件表示“主通道不可用，但备用通道已顶上”，对用户没有影响。
+// 归类为 degraded：不计入错误数，只单独计数，避免日志页一屏红字。
+const DEGRADED_EVENTS = new Set([
+  'task_feed_error',
+  'task_feed_error_waf',
+  'course_list_error',
+  'course_tasks_error'
+]);
+
 function pad2(n) {
   return String(n).padStart(2, '0');
 }
@@ -185,7 +194,13 @@ class Telemetry {
       const entries = this._readFile(this._file(key));
       // 只统计“尚未恢复”的错误：像 learn 主接口 403 但备用通道成功的情况，
       // 对用户没有影响，不该出现在错误计数里（否则每天都是 8 条红字）。
-      const errors = entries.filter((e) => e.ok === false && !(e.meta && e.meta.recovered)).length;
+      // 只统计真正需要用户关心的错误：
+      //  - meta.recovered：已由备用通道恢复
+      //  - DEGRADED_EVENTS：本身就有降级兜底（例如主接口 403）
+      const errors = entries.filter((e) => e.ok === false
+        && !(e.meta && e.meta.recovered)
+        && !DEGRADED_EVENTS.has(e.event)).length;
+      const degraded = entries.filter((e) => e.ok === false && DEGRADED_EVENTS.has(e.event)).length;
       const heartbeats = entries.filter((e) => e.event === 'heartbeat').length;
       const actions = entries.filter((e) => !['heartbeat', 'app_start', 'app_stop'].includes(e.event));
       const duration = entries.reduce((sum, e) => sum + (Number(e.duration_ms) || 0), 0);
@@ -196,6 +211,7 @@ class Telemetry {
         events: entries.length,
         actions: actions.length,
         errors,
+        degraded,
         heartbeats,
         activeMinutes: heartbeats * 5,
         durationMs: duration,

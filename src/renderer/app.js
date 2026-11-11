@@ -971,7 +971,10 @@ function renderLogs() {
   }).join('');
 
   const recent = logs.recent || [];
-  const visible = App.logsErrorOnly ? recent.filter((e) => e.ok === false) : recent;
+  // 已恢复（例如主接口 403 但备用通道成功）不算异常，避免整屏红字吓人
+  const visible = App.logsErrorOnly
+    ? recent.filter((e) => e.ok === false && !(e.meta && e.meta.recovered))
+    : recent;
   const body = $('#event-body');
   if (!visible.length) {
     body.innerHTML = `<tr><td colspan="5" class="empty-cell">${App.logsErrorOnly ? '没有异常事件' : '今天还没有运行事件'}</td></tr>`;
@@ -980,11 +983,20 @@ function renderLogs() {
   body.innerHTML = visible.map((e) => {
     const label = EVENT_LABEL[e.event] || e.event;
     const meta = summarizeMeta(e.meta);
-    const note = e.error || meta || '—';
+    // 历史日志没有 meta.recovered，所以按事件类型兜底识别“可降级”事件
+    const DEGRADED = new Set(['task_feed_error', 'task_feed_error_waf', 'course_list_error', 'course_tasks_error']);
+    const recovered = Boolean(e.meta && e.meta.recovered) || DEGRADED.has(e.event);
+    // 三态展示：正常 / 已恢复（备用成功）/ 异常
+    const badge = e.ok
+      ? '<span class="ok-badge">正常</span>'
+      : (recovered
+        ? '<span class="recover-badge">已恢复</span>'
+        : '<span class="err-badge">异常</span>');
+    const note = recovered ? `${e.error || 'HTTP_403'}（备用通道已成功）` : (e.error || meta || '—');
     return `<tr>
       <td class="muted-cell">${esc((e.local || '').slice(5))}</td>
       <td><span class="event-name">${esc(label)}</span></td>
-      <td>${e.ok ? '<span class="ok-badge">正常</span>' : '<span class="err-badge">异常</span>'}</td>
+      <td>${badge}</td>
       <td class="muted-cell">${e.duration_ms ? `${e.duration_ms} ms` : '—'}</td>
       <td class="${e.error ? 'error-text' : 'muted-cell'}" title="${esc(note)}">${esc(note)}</td>
     </tr>`;
